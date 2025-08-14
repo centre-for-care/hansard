@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """infer_speaker_gender.py
 =================================
 A command‑line tool to enrich Historic Hansard *speaker* records with a
