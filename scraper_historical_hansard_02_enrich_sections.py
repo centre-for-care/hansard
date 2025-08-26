@@ -7,8 +7,8 @@ paragraphs) for sittings within a specified year range.
 
 It processes years in ascending order, retries on failures, and checkpoints output
 after each year. The enriched data is written to:
-  - historical_hansard_full_{start_year}-{end_year}.json
-  - failed_urls_{start_year}-{end_year}.json
+  - historical_hansard_full.json
+  - failed_urls.json
 
 Configuration:
   * START_YEAR / END_YEAR: inclusive range of years to process
@@ -38,8 +38,8 @@ END_YEAR   = 2007
 
 # Input / output paths
 INPUT_FILE   = "historical_step1.json"
-OUTPUT_FILE  = f"historical_hansard_full_{START_YEAR}-{END_YEAR}.json"
-FAILED_FILE  = f"failed_urls_{START_YEAR}-{END_YEAR}.json"
+OUTPUT_FILE  = f"historical_hansard_full.json"
+FAILED_FILE  = f"failed_urls.json"
 
 # HTTP
 HEADERS = {

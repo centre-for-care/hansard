@@ -25,9 +25,9 @@ Example
 -------
 
 ```bash
-python historical_verify_wikipedia_pages.py \
+python historical_02_verify_wikipedia_pages.py \
     --speakers-json speaker_details_with_gender.json \
-    --input-csv     merged_wikipedia.csv \
+    --input-csv     speaker_details_with_wikipedia.csv \
     --output-csv    merged_wikipedia_with_match.csv \
     --api-key       sk-... \
     --batch-size    100

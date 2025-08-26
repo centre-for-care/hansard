@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""historical_04_fallback_search_fetch.py
+"""historical_05_openweb_fallback.py
 
 Open‑web fallback for **historical Hansard** speakers that still lack a
 structured biography after the Wikipedia/Wikidata passes.
@@ -22,20 +22,20 @@ selected column and saves every N rows.
 
 USAGE
 -----
-# Basic: fill blanks using open‑web search, saving in place
-python historical_openweb_fallback.py \
+# Basic: fill blanks using open-web search, saving in place
+python historical_05_openweb_fallback.py \
   --in merged_wikipedia_full_history_enriched.csv \
   --profiles speaker_details_with_gender.json \
   --api-key $OPENAI_API_KEY
 
 # Write to a side column and a new file
-python historical_openweb_fallback.py \
+python historical_05_openweb_fallback.py \
   --in merged_wikipedia_full_history_enriched.csv \
   --out merged_wikipedia_full_history_enriched_openweb.csv \
   --out-col extracted_json_openweb
 
 # Use an explicit original index column in the CSV to look up the profile
-python historical_openweb_fallback.py \
+python historical_05_openweb_fallback.py \
   --in merged_wikipedia_full_history_enriched.csv \
   --profiles speaker_details_with_gender.json \
   --index-col index
@@ -246,7 +246,7 @@ def run_openweb(
     client = ensure_client(api_key)
 
     # Load frame
-    df = pd.read_csv(in_csv, dtype=str)
+    df = pd.read_csv(in_csv, dtype=str, encoding="utf-8-sig")
     if out_col not in df.columns:
         df[out_col] = ""
 

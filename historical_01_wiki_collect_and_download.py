@@ -26,7 +26,7 @@ USAGE
 -----
 
 ```bash
-python historical_hansard_wikipedia_collector.py \
+python historical_01_wiki_collect_and_download.py \
     --input speaker_details_with_gender.json \
     --output speaker_details_with_wikipedia.csv \
     --geckodriver /path/to/geckodriver \
