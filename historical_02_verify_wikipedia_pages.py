@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""historical_verify_wikipedia_pages.py
+"""historical_02_verify_wikipedia_pages.py
 
 Use GPT-4o to decide whether each candidate Wikipedia article really belongs
 to a historical Hansard speaker.

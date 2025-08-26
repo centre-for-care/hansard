@@ -1,4 +1,4 @@
-"""modern_extract_bio_json.py
+"""modern_04_extract_bio_json.py
 
 Extract structured biography JSON *after* a Wikipedia page has
 been verified as the correct person.

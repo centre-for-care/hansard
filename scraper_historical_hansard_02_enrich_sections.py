@@ -1,5 +1,5 @@
 """
-scraper_HistoricalHansard_step2.py
+scraper_historical_hansard_02_enrich_sections.py
 
 This script loads a precomputed JSON index of Hansard sittings (historical_step1.json),
 then fetches and enriches each section's full text (member contributions and procedural

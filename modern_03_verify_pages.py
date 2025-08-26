@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""modern_verify_pages.py
+"""modern_03_verify_pages.py
 
 Verify that a Wikipedia (or Wikidata) article truly refers
 to the parliamentarian / peer in question, using a *yes / no / uncertain* GPT

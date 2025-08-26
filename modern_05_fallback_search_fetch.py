@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""modern_fallback_search_fetch.py
+"""modern_05_fallback_search_fetch.py
 
 For speakers whose initial Wikipedia pages were *not* verified,
 probe GPT‑4o‑search‑preview to locate a dedicated Wikipedia **or** Wikidata page

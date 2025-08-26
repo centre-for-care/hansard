@@ -1,5 +1,5 @@
 """
-scraper_HistoricalHansard_step3.py
+scraper_historical_hansard_03_collect_speaker_metadata.py
 
 This script scrapes UK Parliament Hansard speaker index and detail pages,
 building a JSON list of speaker profiles including:

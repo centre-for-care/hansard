@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""historical_extract_bio_json.py
+"""historical_03_extract_bio_json.py
 
 For every *verified* Wikipedia article (``match_decision == "yes"``) in the
 collector CSV, call GPT-4o to extract a rich biography JSON.

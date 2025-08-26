@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scraper_HistoricalHansard_step1.py
+scraper_historical_hansard_01_calendar_index.py
 
 Fetches all Hansard sittings from 1802-01-01 to 2006-01-01 and writes out
 a JSON checkpoint file ("historical_step1.json") containing, for each day:

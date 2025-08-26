@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""infer_speaker_gender.py
+"""historical_00_infer_speaker_gender.py
 ====================================================
 Single‑file replica of the *ad‑hoc notebook logic* you
 shared, wrapped into a clean script.
