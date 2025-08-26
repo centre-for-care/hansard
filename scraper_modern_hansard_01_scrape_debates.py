@@ -1,303 +1,397 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Hansard Scraper
+modern_hansard_01_scrape_debates.py
 
-This script scrapes Modern Hansard parliamentary debate data from https://hansard.parliament.uk/. Users only need to set 
-the START_YEAR and END_YEAR values to run the entire pipeline.
+Scrape Modern Hansard debate structure from https://hansard.parliament.uk/
 
-The script performs the following tasks:
-  1. Scrapes the Hansard calendar to get all available business dates between 
-     the given years.
-  2. Saves available dates to a JSON file.
-  3. For each available date, extracts the HTML download links for that day.
-  4. For each section URL, parses the hierarchical debate structure including:
-       - Section headings (e.g., "House of Commons", "Prayers", "Cabinet Office", etc.)
-       - Info lines (e.g., "Thursday 6 March 2025", "The House met at half-past Nine o’clock")
-       - Speaker contributions (with speaker names and text paragraphs)
-  5. Saves the full scraped data to a JSON file.
+What it does
+------------
+1) Collect available sitting dates for a year range (Commons by default).
+2) For each date, extract "HTML download" debate links.
+3) For each debate URL, parse the hierarchical structure:
+   - Section headings (h2/h3)
+   - Info lines (date/time/metadata)
+   - Speaker contributions (name + paragraphs)
+   - Nested subsections
 
-Usage:
-    Simply edit the START_YEAR and END_YEAR constants as needed, then run:
-        python hansard_scraper.py
+Outputs
+-------
+- Dates checkpoint JSON     (default: modern_available_dates.json)
+- Full scraped data as JSON (default: modern_hansard_data.json)
+
+Usage
+-----
+# Basic (Commons, 2020–2021)
+python modern_hansard_01_scrape_debates.py --start-year 2020 --end-year 2021
+
+# Lords only, custom files, be nice with 4s delay
+python modern_hansard_01_scrape_debates.py --chamber Lords \
+  --start-year 2019 --end-year 2019 \
+  --dates-file lords_dates_2019.json \
+  --out lords_2019.json --sleep 4
+
+# Reuse existing dates file (faster)
+python modern_hansard_01_scrape_debates.py --start-year 2020 --end-year 2020 --reuse-dates
 """
+from __future__ import annotations
 
-import time
+import argparse
 import json
-from typing import List, Dict, Optional, Any, Tuple
-import cloudscraper
-from cloudscraper import CloudScraper, create_scraper
-from bs4 import BeautifulSoup
+import logging
+import time
+from dataclasses import dataclass, asdict
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
 import requests
+from bs4 import BeautifulSoup
+
+try:
+    # cloudscraper gracefully handles Cloudflare
+    import cloudscraper
+    from cloudscraper import CloudScraper
+except Exception as e:  # pragma: no cover
+    raise SystemExit("Please `pip install cloudscraper bs4`") from e
 
 
-# -----------------------------
-# Configuration: Only modify these
-START_YEAR: int = 2020
-END_YEAR: int = 2021
+BASE_URL = "https://hansard.parliament.uk"
+DEFAULT_SLEEP = 3.0
+DEFAULT_TIMEOUT = 30
+DEFAULT_RETRIES = 3
 
-# Output file names
-AVAILABLE_DATES_FILE: str = "available_dates.json"
-OUTPUT_FILE: str = "hansard_data.json"
-# -----------------------------
+# -----------------------------------------------------------------------------
+# Data structures
+# -----------------------------------------------------------------------------
+@dataclass
+class Contribution:
+    speaker: str
+    speaker_url: Optional[str]
+    paragraphs: List[str]
 
-# Internal constants
-BASE_URL: str = "https://hansard.parliament.uk"
-SLEEP_TIME: int = 3  # seconds between requests
 
-def get_available_dates(scraper: CloudScraper, start_year: int, end_year: int) -> List[str]:
-    """
-    Scrape each month's first day page to collect all available business dates.
-    
-    Args:
-        scraper: A CloudScraper instance.
-        start_year: The starting year (inclusive).
-        end_year: The ending year (inclusive).
-    
-    Returns:
-        A list of date strings formatted as 'YYYY-MM-DD'.
-    """
+@dataclass
+class DebateNode:
+    heading: Optional[str]
+    items: List[str]
+    contributions: List[Contribution]
+    subdebates: List["DebateNode"]
+    depth: int
+
+
+# -----------------------------------------------------------------------------
+# HTTP helpers
+# -----------------------------------------------------------------------------
+def make_scraper() -> CloudScraper:
+    s = cloudscraper.create_scraper(browser={"browser": "firefox", "platform": "linux", "mobile": False})
+    s.headers.update({"User-Agent": "ModernHansardScraper/1.0 (academic use)"})
+    return s
+
+
+def get_with_retry(s: CloudScraper, url: str, *, timeout: int = DEFAULT_TIMEOUT, retries: int = DEFAULT_RETRIES, sleep: float = DEFAULT_SLEEP) -> requests.Response:
+    for attempt in range(1, retries + 1):
+        try:
+            resp = s.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as e:
+            logging.warning("GET failed (%s/%s) %s → %s", attempt, retries, url, e)
+            if attempt == retries:
+                raise
+            time.sleep(sleep)
+    raise RuntimeError("unreachable")  # pragma: no cover
+
+
+# -----------------------------------------------------------------------------
+# Step 1 – find available sitting dates
+# -----------------------------------------------------------------------------
+def month_url(chamber: str, year: int, month: int) -> str:
+    # URL pattern is /{Chamber}/{YYYY}-{MM}-01
+    return f"{BASE_URL}/{chamber}/{year}-{month:02d}-01"
+
+
+def extract_dates_from_calendar(html: str) -> List[str]:
+    """Return dates (YYYY-MM-DD) that have business from a month calendar."""
+    soup = BeautifulSoup(html, "html.parser")
+    links = soup.select("div.d-none.d-lg-block table.calendar-grid a.day-link")
+    out: List[str] = []
+    for a in links:
+        aria = a.get("aria-label", "")
+        # Typically contains "has business"
+        if "has business" in aria.lower():
+            try:
+                # Formats like: "Wednesday 11 March 2020"
+                date_str = aria.split(".")[-1].strip()
+                dt = datetime.strptime(date_str, "%A %d %B %Y")
+                out.append(dt.strftime("%Y-%m-%d"))
+            except Exception:
+                # Fallback: try parsing any date-like tail
+                pass
+    # de-dup while preserving order
+    return list(dict.fromkeys(out))
+
+
+def get_available_dates(
+    scraper: CloudScraper,
+    chamber: str,
+    start_year: int,
+    end_year: int,
+    sleep: float,
+) -> List[str]:
     all_dates: List[str] = []
     for year in range(start_year, end_year + 1):
         for month in range(1, 13):
-            url: str = f"{BASE_URL}/Commons/{year}-{month:02d}-01"
-            response = scraper.get(url)
-            if not response.ok:
-                print(f"  -> No page for {year}-{month:02d} (status {response.status_code}). Skipping.")
+            url = month_url(chamber, year, month)
+            try:
+                resp = get_with_retry(scraper, url)
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code in (404, 410):
+                    logging.info("No page for %s-%02d (%s)", year, month, e.response.status_code)
+                else:
+                    logging.warning("Skipping %s-%02d due to error: %s", year, month, e)
                 continue
-            soup = BeautifulSoup(response.content, 'html.parser')
-            links = soup.select('div.d-none.d-lg-block table.calendar-grid a.day-link')
-            for link in links:
-                aria_label = link.get("aria-label", "")
-                if "has business" in aria_label.lower():
-                    try:
-                        # Example: "Wednesday 11 March 2020"
-                        date_str = aria_label.split('.')[-1].strip()
-                        date_obj = datetime.strptime(date_str, "%A %d %B %Y")
-                        formatted = date_obj.strftime("%Y-%m-%d")
-                        all_dates.append(formatted)
-                    except Exception as e:
-                        print("Error parsing date from:", aria_label, e)
-            time.sleep(SLEEP_TIME)
-    # Remove duplicates while preserving order.
+            dates = extract_dates_from_calendar(resp.text)
+            logging.info("Found %d dates in %s-%02d", len(dates), year, month)
+            all_dates.extend(dates)
+            time.sleep(sleep)
+    # unique preserve order
     return list(dict.fromkeys(all_dates))
 
 
-def save_available_dates(dates: List[str], filename: str = AVAILABLE_DATES_FILE) -> None:
-    """
-    Save the list of available dates to a JSON file.
-    
-    Args:
-        dates: List of date strings.
-        filename: Output file name.
-    """
-    with open(filename, 'w') as f:
-        json.dump(dates, f, indent=2)
+# -----------------------------------------------------------------------------
+# Step 2 – extract HTML download links for each date
+# -----------------------------------------------------------------------------
+def day_url(chamber: str, date_str: str) -> str:
+    # /Commons/YYYY-MM-DD or /Lords/YYYY-MM-DD
+    return f"{BASE_URL}/{chamber}/{date_str}"
 
 
-def load_available_dates(filename: str = AVAILABLE_DATES_FILE) -> List[str]:
+def extract_html_download_links(soup: BeautifulSoup) -> List[str]:
     """
-    Load available dates from a JSON file.
-    
-    Args:
-        filename: The JSON file containing the dates.
-    
-    Returns:
-        A list of date strings.
-    """
-    with open(filename, 'r') as f:
-        return json.load(f)
-
-
-def extract_html_download_links(soup: BeautifulSoup, base_url: str) -> List[str]:
-    """
-    Extract all HTML download links from the "HTML Downloads" section.
-    
-    Args:
-        soup: BeautifulSoup-parsed HTML of the page.
-        base_url: The base URL for constructing full links.
-    
-    Returns:
-        A list of full URLs for HTML downloads.
+    Try multiple strategies to find "HTML Downloads" links.
+    Returns absolute URLs.
     """
     links: List[str] = []
-    html_header = soup.find("div", string="HTML Downloads")
-    if not html_header:
-        return links
-    dropdown_div = html_header.find_parent("div", class_="dropdown-menu")
-    if not dropdown_div:
-        return links
-    found_section = False
-    for child in dropdown_div.find_all(["div", "a"], recursive=False):
-        if child.name == "div" and child.get_text(strip=True) == "HTML Downloads":
-            found_section = True
-            continue
-        if found_section:
-            if child.name == "div" and "dropdown-header" in child.get("class", []):
-                break
-            if child.name == "a" and "dropdown-item" in child.get("class", []):
-                href = child.get("href")
-                if href:
-                    links.append(base_url + href)
-    return links
+
+    # Strategy A: explicit dropdown labeled "HTML Downloads"
+    label_div = soup.find(lambda tag: tag.name == "div" and tag.get_text(strip=True) == "HTML Downloads")
+    if label_div:
+        menu = label_div.find_parent("div", class_="dropdown-menu")
+        if menu:
+            for a in menu.select("a.dropdown-item[href]"):
+                href = a.get("href", "")
+                if href.lower().endswith(".html") or "html" in a.get_text(" ", strip=True).lower():
+                    links.append(BASE_URL + href if href.startswith("/") else href)
+
+    # Strategy B: any dropdown-item with 'html' in text or href
+    if not links:
+        for a in soup.select("a.dropdown-item[href]"):
+            text = a.get_text(" ", strip=True).lower()
+            href = a.get("href", "").lower()
+            if "html" in text or href.endswith(".html") or "/html" in href:
+                full = a.get("href")
+                if full:
+                    links.append(BASE_URL + full if full.startswith("/") else full)
+
+    # de-dup preserve order
+    dedup: List[str] = []
+    for u in links:
+        if u not in dedup:
+            dedup.append(u)
+    return dedup
 
 
-def parse_debate_page(url: str, scraper: CloudScraper) -> Optional[List[Dict[str, Any]]]:
-    """
-    Parse a debate page and return a hierarchical data structure.
-    
-    Each node is a dictionary with the following keys:
-      - "heading": Heading text (from a direct h2/h3 element).
-      - "items": List of info lines (e.g. dates, times, and other metadata).
-      - "contributions": List of speaker contributions (each a dict with keys "speaker" and "text").
-      - "subdebates": List of child nodes (subsections).
-      - "depth": The hierarchical level (integer).
-       
-    Args:
-        url: The URL of the debate page.
-        scraper: A CloudScraper instance.
-    
-    Returns:
-        A list of nodes representing the debate structure, or None if not found.
-    """
-    response = scraper.get(url)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    
-    root_list = soup.find("div", class_="child-debate-list")
-    if not root_list:
+# -----------------------------------------------------------------------------
+# Step 3 – parse a debate page (hierarchical)
+# -----------------------------------------------------------------------------
+def parse_debate_page(url: str, scraper: CloudScraper, sleep: float) -> Optional[List[Dict[str, Any]]]:
+    resp = get_with_retry(scraper, url)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    root = soup.find("div", class_="child-debate-list")
+    if not root:
         return None
 
-    # DFS stack: each element is (current_div, depth, parent_node, node_dict)
-    stack: List[Tuple[BeautifulSoup, int, Optional[Dict[str, Any]], Dict[str, Any]]] = []
-    structure: List[Dict[str, Any]] = []
-    top_debates = root_list.find_all("div", class_="child-debate", recursive=False)
-    for debate in reversed(top_debates):
-        stack.append((debate, 0, None, {}))
-    
-    while stack:
-        current_div, depth, parent, node = stack.pop()
-        node["depth"] = depth
-        
-        # (A) Extract heading from direct h2/h3 elements.
-        heading_el = current_div.find(["h2", "h3"], recursive=False)
-        node["heading"] = heading_el.get_text(strip=True) if heading_el else None
-        
-        # (B) Extract info lines from direct children with "debate-item" in their class list.
-        info_items: List[str] = []
-        debate_items = [
-            d for d in current_div.find_all("div", recursive=False)
-            if d.get("class") and "debate-item" in d.get("class")
-        ]
-        for item in debate_items:
+    def parse_one(div: BeautifulSoup, depth: int) -> DebateNode:
+        # Heading
+        heading_el = div.find(["h2", "h3"], recursive=False)
+        heading = heading_el.get_text(strip=True) if heading_el else None
+
+        # Direct debate items (info lines)
+        info_lines: List[str] = []
+        direct_divs = [d for d in div.find_all("div", recursive=False) if "debate-item" in (d.get("class") or [])]
+        for item in direct_divs:
+            # skip ones that are contributions
             if item.find("div", class_="contribution"):
-                continue  # Skip those with speaker contributions.
+                continue
             for p in item.find_all("p"):
-                text = p.get_text(strip=True)
-                if text:
-                    info_items.append(text)
-        node["items"] = info_items
-        
-        # (C) Extract speaker contributions.
-        contributions: List[Dict[str, Any]] = []
-        for item in debate_items:
-            contrib = item.find("div", class_="contribution")
-            if contrib:
-                speaker_a = contrib.select_one("a.attributed-to-details")
-                if speaker_a:
-                    primary = speaker_a.find("div", class_="primary-text")
-                    secondary = speaker_a.find("div", class_="secondary-text")
-                    if primary and secondary:
-                        speaker_name = primary.get_text(strip=True) + "\n" + secondary.get_text(strip=True)
-                    else:
-                        speaker_name = speaker_a.get_text(strip=True)
-                    speaker_name = speaker_name.strip()
+                txt = p.get_text(strip=True)
+                if txt:
+                    info_lines.append(txt)
+
+        # Contributions
+        contributions: List[Contribution] = []
+        for item in direct_divs:
+            c = item.find("div", class_="contribution")
+            if not c:
+                continue
+
+            a = c.select_one("a.attributed-to-details")
+            speaker_url = None
+            if a:
+                # Try to assemble a more robust label (primary + secondary)
+                primary = a.find("div", class_="primary-text")
+                secondary = a.find("div", class_="secondary-text")
+                if primary and secondary:
+                    speaker = (primary.get_text(strip=True) + " — " + secondary.get_text(strip=True)).strip()
                 else:
-                    speaker_name = "UNKNOWN"
-                paras: List[str] = []
-                content_div = contrib.find("div", class_="content")
-                if content_div:
-                    for p in content_div.find_all("p"):
-                        ptext = p.get_text(strip=True)
-                        if ptext:
-                            paras.append(ptext)
-                contributions.append({
-                    "speaker": speaker_name,
-                    "text": paras
-                })
-        node["contributions"] = contributions
-        node["subdebates"] = []
-        
-        if parent is not None:
-            parent.setdefault("subdebates", []).append(node)
-        else:
-            structure.append(node)
-        
-        # (D) Process nested child-debate-list nodes.
-        sub_lists = current_div.find_all("div", class_="child-debate-list", recursive=False)
-        for sub_list in sub_lists:
-            sub_debates = sub_list.find_all("div", class_="child-debate", recursive=False)
-            for sub_debate in reversed(sub_debates):
-                stack.append((sub_debate, depth + 1, node, {}))
-    
-    return structure
+                    speaker = a.get_text(" ", strip=True)
+                if a.get("href"):
+                    href = a.get("href")
+                    speaker_url = BASE_URL + href if href.startswith("/") else href
+            else:
+                speaker = "UNKNOWN"
+
+            paras: List[str] = []
+            content = c.find("div", class_="content")
+            if content:
+                for p in content.find_all("p"):
+                    txt = p.get_text(strip=True)
+                    if txt:
+                        paras.append(txt)
+
+            contributions.append(Contribution(speaker=speaker, speaker_url=speaker_url, paragraphs=paras))
+
+        # Subdebates
+        subdebates: List[DebateNode] = []
+        for sub_list in div.find_all("div", class_="child-debate-list", recursive=False):
+            for sub in sub_list.find_all("div", class_="child-debate", recursive=False):
+                subdebates.append(parse_one(sub, depth + 1))
+
+        return DebateNode(
+            heading=heading,
+            items=info_lines,
+            contributions=contributions,
+            subdebates=subdebates,
+            depth=depth,
+        )
+
+    top_nodes: List[DebateNode] = []
+    for d in root.find_all("div", class_="child-debate", recursive=False):
+        top_nodes.append(parse_one(d, depth=0))
+
+    time.sleep(sleep)  # politeness
+    # Convert to plain dicts for JSON
+    def node_to_dict(n: DebateNode) -> Dict[str, Any]:
+        return {
+            "heading": n.heading,
+            "items": n.items,
+            "contributions": [asdict(c) for c in n.contributions],
+            "subdebates": [node_to_dict(x) for x in n.subdebates],
+            "depth": n.depth,
+        }
+
+    return [node_to_dict(n) for n in top_nodes]
+
+
+# -----------------------------------------------------------------------------
+# Orchestration
+# -----------------------------------------------------------------------------
+def run(
+    chamber: str,
+    start_year: int,
+    end_year: int,
+    dates_file: str,
+    out_file: str,
+    sleep: float,
+    timeout: int,
+    retries: int,
+    reuse_dates: bool,
+) -> None:
+    scraper = make_scraper()
+
+    # Dates
+    if reuse_dates:
+        with open(dates_file, "r", encoding="utf-8") as f:
+            available_dates = json.load(f)
+        logging.info("Loaded %d dates from %s", len(available_dates), dates_file)
+    else:
+        available_dates = get_available_dates(scraper, chamber, start_year, end_year, sleep)
+        with open(dates_file, "w", encoding="utf-8") as f:
+            json.dump(available_dates, f, indent=2)
+        logging.info("Saved %d dates → %s", len(available_dates), dates_file)
+
+    # For each date: collect debate HTML links
+    results: Dict[str, List[str]] = {}
+    for date in available_dates:
+        url = day_url(chamber, date)
+        try:
+            resp = get_with_retry(scraper, url, timeout=timeout, retries=retries, sleep=sleep)
+        except requests.RequestException as e:
+            logging.warning("Skipping date %s due to error: %s", date, e)
+            continue
+        soup = BeautifulSoup(resp.text, "html.parser")
+        links = extract_html_download_links(soup)
+        results[date] = links
+        logging.info("[%s] %d HTML links", date, len(links))
+        time.sleep(sleep)
+
+    # Parse each debate URL into structure
+    all_data: Dict[str, List[Dict[str, Any]]] = {}
+    for date, links in results.items():
+        all_data[date] = []
+        for url in links:
+            logging.info("Parsing %s", url)
+            try:
+                struct = parse_debate_page(url, scraper, sleep)
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code == 404:
+                    logging.info("  404 Not Found → %s (skipping)", url)
+                    continue
+                logging.warning("  HTTP error on %s: %s", url, e)
+                continue
+            except Exception as e:
+                logging.warning("  Error on %s: %s", url, e)
+                continue
+            all_data[date].append({"url": url, "data": struct})
+
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(all_data, f, indent=2, ensure_ascii=False)
+    logging.info("Wrote %d days → %s", len(all_data), out_file)
+
+
+# -----------------------------------------------------------------------------
+# CLI
+# -----------------------------------------------------------------------------
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Scrape Modern Hansard debates (structure, not PDFs).")
+    p.add_argument("--chamber", default="Commons", choices=["Commons", "Lords"], help="Parliamentary chamber")
+    p.add_argument("--start-year", type=int, required=True, help="Start year (inclusive)")
+    p.add_argument("--end-year", type=int, required=True, help="End year (inclusive)")
+    p.add_argument("--dates-file", default="modern_available_dates.json", help="Checkpoint JSON for dates")
+    p.add_argument("--out", dest="out_file", default="modern_hansard_data.json", help="Output JSON file")
+    p.add_argument("--sleep", type=float, default=DEFAULT_SLEEP, help="Seconds to sleep between requests")
+    p.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout (seconds)")
+    p.add_argument("--retries", type=int, default=DEFAULT_RETRIES, help="HTTP retries")
+    p.add_argument("--reuse-dates", action="store_true", help="Reuse existing dates file if present")
+    p.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    return p.parse_args()
 
 
 def main() -> None:
-    scraper: CloudScraper = create_scraper(browser="firefox")
-    
-    # Step 1: Get available dates and save them.
-    available_dates: List[str] = get_available_dates(scraper, START_YEAR, END_YEAR)
-    save_available_dates(available_dates, AVAILABLE_DATES_FILE)
-    print("Available dates saved to", AVAILABLE_DATES_FILE)
-    
-    # Step 2: For each available date, extract HTML download links.
-    available_dates = load_available_dates(AVAILABLE_DATES_FILE)
-    
-    results: Dict[str, List[str]] = {}
-    for date in available_dates:
-        day_url: str = f"{BASE_URL}/Commons/{date}"
-        try:
-            response = scraper.get(day_url)
-        except Exception as e:
-            print(f"  -> Error fetching {day_url}: {e}")
-            continue
-        if not response.ok:
-            print(f"  -> Failed to get data for {date} (status {response.status_code}). Skipping.")
-            continue
-        soup = BeautifulSoup(response.content, "html.parser")
-        html_links: List[str] = extract_html_download_links(soup, BASE_URL)
-        results[date] = html_links
-        time.sleep(SLEEP_TIME)
-    
-    # Step 3: For each date and URL, parse the debate page structure.
-    all_data: Dict[str, List[Dict[str, Any]]] = {}
-    for date, url_list in results.items():
-        all_data[date] = []
-        for url in url_list:
-            print(f"Processing {url}...")
-            try:
-                debate_structure = parse_debate_page(url, scraper)
-            except requests.exceptions.HTTPError as e:
-                if e.response.status_code == 404:
-                    print(f"Skipping {url} (404 Not Found).")
-                    continue
-                else:
-                    raise
-            except Exception as e:
-                print(f"Error processing {url}: {e}")
-                continue
-            all_data[date].append({
-                "url": url,
-                "data": debate_structure
-            })
-            time.sleep(SLEEP_TIME)
-    
-    # Save the full scraped data to a JSON file.
-    with open(OUTPUT_FILE, "w") as f:
-        json.dump(all_data, f, indent=2)
-    print("Scraped data saved to", OUTPUT_FILE)
+    args = parse_args()
+    logging.basicConfig(level=getattr(logging, args.log_level), format="%(asctime)s %(levelname)s %(message)s")
+    run(
+        chamber=args.chamber,
+        start_year=args.start_year,
+        end_year=args.end_year,
+        dates_file=args.dates_file,
+        out_file=args.out_file,
+        sleep=args.sleep,
+        timeout=args.timeout,
+        retries=args.retries,
+        reuse_dates=args.reuse_dates,
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -1,29 +1,33 @@
-"""modern_04_extract_bio_json.py
+#!/usr/bin/env python3
+"""
+modern_04_extract_bio_json.py
 
-Extract structured biography JSON *after* a Wikipedia page has
-been verified as the correct person.
+Extract structured biography JSON *after* a Wikipedia page has been verified
+as the correct person.
 
-Input CSV requirements
-----------------------
-* ``wiki_text``         – article text already flattened (non‑empty for rows to process)
-* ``extracted_json``    – will be filled with GPT output (kept if already present)
+Input (recommended): the output CSV from modern_03_verify_pages.py, which
+typically includes:
+  - wikipedia_text_1, wikipedia_text_2
+  - wikipedia_links (JSON list)
+  - gpt_reply_1, gpt_reply_2
+  - matched_url
+  - final_reply (rows with value "yes" are treated as verified)
 
-Columns added / updated
------------------------
-* ``extracted_json``    – the biography JSON or empty on failure
-* ``api_response_full`` – raw OpenAI response (useful for audit / re‑prompt)
+This script will:
+  • Derive a single `wiki_text` for verified rows (or use an existing column if present)
+  • Call GPT to extract a strict JSON biography
+  • Save results into:
+      - extracted_json       (strict JSON from the model)
+      - api_response_full    (raw API response for audit)
 
-The script is resumable and skips rows where ``extracted_json`` is non‑blank.
+Idempotent/resumable: skips rows where `extracted_json` is already non-blank.
 
-Example
--------
-```bash
-python modern_extract_bio_json.py \
-  --input modern_step6_input.csv \
-  --output modern_step6_output.csv \
-  --api-key $OPENAI_API_KEY \
-  --batch-size 100
-```
+Example:
+  python modern_04_extract_bio_json.py \
+    --input modern_03_wikipedia_verify.csv \
+    --output modern_04_bio_extracted.csv \
+    --api-key $OPENAI_API_KEY \
+    --batch-size 100
 """
 from __future__ import annotations
 
@@ -34,14 +38,21 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
-import openai
 import pandas as pd
-import tiktoken
+
+# OpenAI v1 SDK
+from openai import OpenAI
+
+# tiktoken is optional; we fall back if unavailable
+try:
+    import tiktoken  # type: ignore
+except Exception:  # pragma: no cover
+    tiktoken = None  # fallback later
 
 # ---------------------------------------------------------------------------
-# Prompt (long string constant to avoid extra file dependency)
+# Prompt (single constant)
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """
 You are a research assistant extracting structured metadata from Wikipedia articles about British politicians and peers.
@@ -70,65 +81,43 @@ Apply the first rule that matches; Clarendon overrides everything else.
 
 ━━━━━━━━  OUTPUT SCHEMA  ━━━━━━━━
 {
-  "name": "",                       // Full legal name
+  "name": "",
 
-  "date_of_birth": "",              // Prefer full YYYY-MM-DD.
-                                     // If only “July 1820” is known, return "1820-07".
-                                     // If only year (e.g. "1820") is known, return "1820".
-                                     // If nothing reliable, return null
-  "date_of_death": "",              // Same rules as date_of_birth
-  "place_of_birth": "",             // Record **exactly** what Wikipedia gives, in order.
-                                     // e.g. "Stoke Newington, London, England"
-                                     // If only “London” appears, return "London".
-                                     // Do **not** invent missing parts; if no birthplace,
-                                     // return null.
+  "date_of_birth": "",              // Prefer YYYY-MM-DD; allow YYYY-MM or YYYY; else null
+  "date_of_death": "",              // same rules as date_of_birth
+  "place_of_birth": "",
 
-  "party_affiliation": [            // One element per party period; keep chronological order
-    {
-      "party": "",                  // e.g. "Conservative", "Liberal Unionist"
-      "start_year": null,           // int or null
-      "end_year": null              // int or null (null = still affiliated or unknown end)
-    }
+  "party_affiliation": [
+    { "party": "", "start_year": null, "end_year": null }
   ],
 
   "education": {
     "school_type": "",              // "Clarendon", "HMC schools", "Other private", "All other", or null
-    "school_name": "",              // Full secondary-school name, or null
-    "school_country": "",           // "UK", "France", "USA", etc., or null
-    "universities": [               // one object per degree / course
+    "school_name": "",
+    "school_country": "",
+    "universities": [
       {
-        "university_name": "",      // e.g. "University of Oxford", "University of Cambridge", or null
-        "university_city": "",      // e.g. "Oxford", "Cambridge", or null
-        "university_country": "",   // "UK","USA", etc.
-        "degree_level": "",         // "Undergraduate","Masters","Doctorate",
-                                    // "Diploma","Professional Qualification", or null
-        "field_of_study": ""        // e.g. "Law","PPE","History", or null
+        "university_name": "",
+        "university_city": "",
+        "university_country": "",
+        "degree_level": "",
+        "field_of_study": ""
       }
-      /* repeat for each additional qualification */
     ]
   },
 
-  "occupation_before_politics": "", // Main profession(s) prior to entering parliament, or null
+  "occupation_before_politics": "",
 
   "political_career": {
-    "first_elected":,          // Year first elected to Commons/Lords; null if unknown
-    "last_elected":,           // Year last elected / final term, or null
-    "years_in_parliament":,    // Total years served as MP/Lord; null if unknown
-    "ministerial_positions": [],    // List of "Title (start–end)" strings
-    "leadership_positions": []      // List of "Role (start–end)" strings, e.g. "Chief Whip (1886–1892)"
+    "first_elected": null,
+    "last_elected": null,
+    "years_in_parliament": null,
+    "ministerial_positions": [],
+    "leadership_positions": []
   },
 
-{
-  "constituencies": [         // chronological order, earliest → latest
-    {
-      "seat": "",             // Constituency name exactly as it appears, e.g. "Tamworth"
-      "start": "",            // Prefer full ISO date  "YYYY-MM-DD".
-                              // If only month/year known:  "YYYY-MM".
-                              // If only year known:        "YYYY".
-                              // If unknown:                null
-      "end": ""               // Same rules as "start".  null = still in office or unknown end.
-    }
-    /* repeat for every distinct seat-holding period */
+  "constituencies": [
+    { "seat": "", "start": "", "end": "" }
   ]
 }
 ━━━━━━━━  END OF SCHEMA  ━━━━━━━━
@@ -136,7 +125,7 @@ Apply the first rule that matches; Clarendon overrides everything else.
 Wikipedia article text:
 """
 
-# heading pattern for truncation
+# Heading pattern for truncation before References
 REF_PATTERN = re.compile(r"(?i)\n+references\b")
 
 # ---------------------------------------------------------------------------
@@ -144,17 +133,40 @@ REF_PATTERN = re.compile(r"(?i)\n+references\b")
 # ---------------------------------------------------------------------------
 
 def truncate_after_references(text: str) -> str:
-    """Remove content after the last 'References' heading to save tokens."""
+    """Remove content after the first 'References' heading to save tokens."""
     parts = REF_PATTERN.split(text, maxsplit=1)
     return parts[0]
 
 
+def _get_encoder(model_name: str):
+    """
+    Best-effort token encoder:
+      - try model-specific encoding
+      - fallback to cl100k_base
+      - else return a naive byte-counter approximation (≈4 chars/token)
+    """
+    if tiktoken is None:
+        return None
+    try:
+        return tiktoken.encoding_for_model(model_name)
+    except Exception:
+        try:
+            return tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            return None
+
+
 def token_count(text: str, enc) -> int:
+    if enc is None:
+        # very rough fallback: ~4 chars per token
+        return max(1, len(text) // 4)
     return len(enc.encode(text))
 
 
-def ask_gpt(client: openai.OpenAI, model: str, system_prompt: str, page_text: str, retries: int = 2) -> str | None:
-    """Send (system,user) messages, return raw JSON string or None on failure."""
+def ask_gpt(client: OpenAI, model: str, system_prompt: str, page_text: str, retries: int = 2) -> Optional[Tuple[str, str]]:
+    """
+    Send (system,user) messages. Returns (json_string, raw_api_response_json) or None on failure.
+    """
     for attempt in range(1, retries + 1):
         try:
             resp = client.chat.completions.create(
@@ -165,15 +177,67 @@ def ask_gpt(client: openai.OpenAI, model: str, system_prompt: str, page_text: st
                 ],
                 temperature=0,
             )
-            return resp.choices[0].message.content.strip(), json.dumps(resp.to_dict(), ensure_ascii=False)
-        except Exception as exc:  # pylint: disable=broad-except
-            if "rate limit" in str(exc).lower() and attempt < retries:
-                logging.warning("Rate‑limit; sleeping 20 s (attempt %d)…", attempt)
+            content = (resp.choices[0].message.content or "").strip()
+            return content, json.dumps(resp.to_dict(), ensure_ascii=False)
+        except Exception as exc:  # pragma: no cover
+            msg = str(exc).lower()
+            if ("rate limit" in msg or "429" in msg) and attempt < retries:
+                logging.warning("Rate-limited; sleeping 20s (attempt %d/%d)…", attempt, retries)
                 time.sleep(20)
                 continue
             logging.error("OpenAI error: %s", exc)
             return None
     return None
+
+
+def _parse_json_list(cell) -> List[str]:
+    if not isinstance(cell, str) or not cell.strip():
+        return []
+    try:
+        data = json.loads(cell)
+        return data if isinstance(data, list) else []
+    except Exception:
+        try:
+            import ast
+            data = ast.literal_eval(cell)
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+
+def pick_verified_text(row: pd.Series) -> str:
+    """
+    Choose the verified article text for a row from modern_03:
+      - If 'wiki_text' column already exists and is non-blank → use it.
+      - If final_reply == 'yes':
+          • Prefer match by matched_url index, else by gpt_reply_1/2 == 'yes'.
+      - Otherwise return empty string (not verified).
+    """
+    # use provided wiki_text if present
+    if "wiki_text" in row and isinstance(row["wiki_text"], str) and row["wiki_text"].strip():
+        return row["wiki_text"].strip()
+
+    final_reply = str(row.get("final_reply", "")).strip().lower()
+    if final_reply != "yes":
+        return ""
+
+    text1 = str(row.get("wikipedia_text_1", "") or "")
+    text2 = str(row.get("wikipedia_text_2", "") or "")
+    links = _parse_json_list(row.get("wikipedia_links", "")) or []
+
+    matched_url = str(row.get("matched_url", "") or "").strip()
+    if matched_url and matched_url in links:
+        i = links.index(matched_url)
+        return text1 if i == 0 else (text2 if i == 1 else "")
+
+    # fallback to the first “yes”
+    if str(row.get("gpt_reply_1", "")).strip().lower() == "yes" and text1:
+        return text1
+    if str(row.get("gpt_reply_2", "")).strip().lower() == "yes" and text2:
+        return text2
+
+    # last resort: whichever non-empty is available
+    return text1 or text2
 
 
 # ---------------------------------------------------------------------------
@@ -182,40 +246,46 @@ def ask_gpt(client: openai.OpenAI, model: str, system_prompt: str, page_text: st
 
 def extract_bio(
     df: pd.DataFrame,
-    client: openai.OpenAI,
+    client: OpenAI,
     model: str,
     token_limit: int,
     batch_size: int,
     out_path: Path,
 ) -> None:
-    enc = tiktoken.encoding_for_model(model)
+    enc = _get_encoder(model)
 
     total = len(df)
-    for row_idx in df.index:
-        # skip if wiki_text empty or bio already extracted
-        if not str(df.at[row_idx, "wiki_text").strip():
-            continue
-        if str(df.at[row_idx, "extracted_json").strip():
+    for n, (row_idx, row) in enumerate(df.iterrows(), start=1):
+        # Skip if already extracted
+        existing = str(row.get("extracted_json", "") or "").strip()
+        if existing:
             continue
 
-        text = str(df.at[row_idx, "wiki_text"])
-        if token_count(text, enc) > token_limit:
-            text = truncate_after_references(text)
-            if token_count(text, enc) > token_limit:
+        # Determine the verified wiki_text (or skip)
+        wiki_text = pick_verified_text(row)
+        if not wiki_text:
+            continue
+
+        # Rough token budgeting (system + user)
+        combined = SYSTEM_PROMPT + "\n" + wiki_text
+        if token_count(combined, enc) > token_limit:
+            wiki_text = truncate_after_references(wiki_text)
+            combined = SYSTEM_PROMPT + "\n" + wiki_text
+            if token_count(combined, enc) > token_limit:
                 logging.warning("[%d] Still too long after truncation; skipped.", row_idx)
                 continue
-            df.at[row_idx, "wiki_text"] = text  # update truncated version for audit
+            # persist truncated text for audit
+            df.at[row_idx, "wiki_text"] = wiki_text
 
-        result = ask_gpt(client, model, SYSTEM_PROMPT, text)
+        result = ask_gpt(client, model, SYSTEM_PROMPT, wiki_text)
         if result:
             json_out, raw_resp = result
-            df.at[row_idx, "extracted_json"]    = json_out
+            df.at[row_idx, "extracted_json"] = json_out
             df.at[row_idx, "api_response_full"] = raw_resp
 
-        # checkpoint
-        if (row_idx + 1) % batch_size == 0:
+        if (n % batch_size) == 0:
             df.to_csv(out_path, index=False, encoding="utf-8-sig")
-            logging.info("Checkpointed %d/%d rows", row_idx + 1, total)
+            logging.info("Checkpointed %d/%d rows → %s", n, total, out_path)
 
     df.to_csv(out_path, index=False, encoding="utf-8-sig")
     logging.info("Extraction complete – results in %s", out_path)
@@ -226,14 +296,16 @@ def extract_bio(
 # ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Extract structured biography JSON from verified Wikipedia texts.")
-    parser.add_argument("--input",       type=Path, required=True, help="CSV with wiki_text column ready")
-    parser.add_argument("--output",      type=Path, required=True, help="Destination CSV path")
-    parser.add_argument("--api-key",     default=os.getenv("OPENAI_API_KEY"), help="OpenAI API key (env fallback)")
-    parser.add_argument("--model",      default="gpt-4o", help="Model name (default: gpt-4o)")
-    parser.add_argument("--token-limit", type=int, default=30000, help="Max tokens allowed incl. prompt")
-    parser.add_argument("--batch-size",  type=int, default=100, help="Rows processed before checkpoint save")
-    parser.add_argument("--log-level",   default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Logging verbosity")
+    parser = argparse.ArgumentParser(description="Extract structured biography JSON from verified Wikipedia texts (modern era).")
+    parser.add_argument("--input",       type=Path, required=True, help="CSV from modern_03 (or compatible).")
+    parser.add_argument("--output",      type=Path, required=True, help="Destination CSV path.")
+    parser.add_argument("--api-key",     default=os.getenv("OPENAI_API_KEY"), help="OpenAI API key (env fallback).")
+    parser.add_argument("--model",       default="gpt-4o", help="Model name (default: gpt-4o).")
+    parser.add_argument("--token-limit", type=int, default=30000, help="Max tokens (system+user).")
+    parser.add_argument("--batch-size",  type=int, default=100, help="Rows processed between checkpoints.")
+    parser.add_argument("--log-level",   default="INFO",
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Logging verbosity.")
     return parser.parse_args()
 
 
@@ -242,15 +314,20 @@ def main() -> None:
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(message)s")
 
     if not args.api_key:
-        raise SystemExit("OpenAI API key is required (via --api-key or OPENAI_API_KEY env var)")
+        raise SystemExit("OpenAI API key is required (via --api-key or OPENAI_API_KEY).")
 
-    client = openai.OpenAI(api_key=args.api_key)
+    client = OpenAI(api_key=args.api_key)
 
     df = pd.read_csv(args.input, dtype=str)
-    # Ensure required cols exist
+
+    # Ensure output columns exist
     for col in ("extracted_json", "api_response_full"):
         if col not in df.columns:
             df[col] = ""
+
+    # Ensure wiki_text column exists (even if we derive per-row)
+    if "wiki_text" not in df.columns:
+        df["wiki_text"] = ""
 
     extract_bio(df, client, args.model, args.token_limit, args.batch_size, args.output)
 

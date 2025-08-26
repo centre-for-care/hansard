@@ -1,111 +1,34 @@
 #!/usr/bin/env python3
-"""Download Wikipedia article text for modern Hansard links (simple version).
+"""
+modern_02_download_wiki_texts.py
 
-Reads `merged_wikipedia_modern.csv`, fetches up to two Wikipedia URLs per row,
-extracts full article text (paragraphs, headings, lists, tables, infobox) and
-writes two new columns `wikipedia_text_1`, `wikipedia_text_2` to
-`merged_wikipedia_modern_with_text.csv`.
+Download and flatten up to **two** Wikipedia articles for each modern member row.
+
+Input (from modern_01_collect_wikipedia_candidates.py)
+------------------------------------------------------
+CSV with columns including:
+- wikipedia_links       : JSON-encoded list (<= 2) of Wikipedia URLs
+- wikipedia_full_texts  : (optional) JSON-encoded list of article texts if
+                          modern_01 was run without --no-download
+
+Output
+------
+Same CSV schema plus two new columns:
+- wikipedia_text_1 : full text for the first URL (or empty)
+- wikipedia_text_2 : full text for the second URL (or empty)
+
+Notes
+-----
+- If wikipedia_full_texts is already present (from modern_01 without --no-download),
+  this script copies those values into wikipedia_text_1/2 and skips refetching.
+- Resumable: rows that already have both wikipedia_text_1 and wikipedia_text_2 are skipped.
+- Checkpointing: the output CSV is written every --batch-size rows.
 """
 
-import ast
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-
-# ==== 0. CONFIG =============================================================
-INPUT_CSV  = "merged_wikipedia_modern.csv"
-OUTPUT_CSV = "merged_wikipedia_modern_with_text.csv"
-BATCH_SIZE = 100  # save checkpoint every N rows
-TIMEOUT    = 60   # seconds
-
-session = requests.Session()
-session.headers.update({
-    "User-Agent": "Mozilla/5.0 (compatible; my-wiki-bot/1.0)"
-})
-
-# ==== 1. Helpers ============================================================
-
-def fetch_wikipedia_soup(url: str) -> BeautifulSoup:
-    """Download the page and return BeautifulSoup (raises on HTTP errors)."""
-    resp = session.get(url, timeout=TIMEOUT)
-    resp.raise_for_status()
-    return BeautifulSoup(resp.text, "html.parser")
-
-
-def extract_full_text(soup: BeautifulSoup) -> str:
-    """Flatten intro, main text, tables and infobox into one newline‑delimited string."""
-    parts = ["Main text:", ""]
-    container = soup.select_one("#mw-content-text .mw-parser-output")
-    if container:
-        for tag in container.find_all(["p", "h2", "h3", "li", "table"]):
-            text = tag.get_text(" ", strip=True)
-            if text:
-                parts.extend([text, ""])
-    parts.extend(["Infobox:", ""])
-    infobox = soup.find(class_="infobox")
-    if infobox:
-        for row in infobox.find_all("tr"):
-            th, td = row.find("th"), row.find("td")
-            if th and td:
-                k = th.get_text(" ", strip=True)
-                v = td.get_text(" ", strip=True)
-                if k and v:
-                    parts.append(f"{k}: {v}")
-    return "\n".join(parts).strip()
-
-# ==== 2. Load & initialise ==================================================
-
-df = pd.read_csv(INPUT_CSV, dtype=str)
-# convert stringified lists → list objects
-df["wikipedia_links"] = df["wikipedia_links"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else [])
-
-df["wikipedia_text_1"] = ""
-df["wikipedia_text_2"] = ""
-
-# ==== 3. Iterate & checkpoint ==============================================
-
-for idx in df.index:
-    links = df.at[idx, "wikipedia_links"]
-    text1, text2 = "", ""
-
-    if len(links) >= 1:
-        try:
-            text1 = extract_full_text(fetch_wikipedia_soup(links[0]))
-        except Exception as e:  # pylint: disable=broad-except
-            print(f"[{idx}] first link failed: {e}")
-
-    if len(links) >= 2:
-        try:
-            text2 = extract_full_text(fetch_wikipedia_soup(links[1]))
-        except Exception as e:  # pylint: disable=broad-except
-            print(f"[{idx}] second link failed: {e}")
-
-    df.at[idx, "wikipedia_text_1"] = text1
-    df.at[idx, "wikipedia_text_2"] = text2
-#!/usr/bin/env python3
-"""modern_download_wiki_texts.py
-================================
-Download and flatten up to **two** Wikipedia articles for each speaker record.
-
-The script expects an input CSV created by *modern_hansard_wikipedia_collector.py*
-with a column **`wikipedia_links`** (a JSON-encoded list of ≤ 2 URLs).
-It appends two new columns:
-
-* ``wikipedia_text_1`` – full text for the first URL (or empty).
-* ``wikipedia_text_2`` – full text for the second URL (or empty).
-
-Features
---------
-* **Resumable** – already-filled rows are skipped; checkpoints written every
-  ``--batch-size`` rows.
-* **Polite fetching** – 0.3 s delay between requests and custom UA string.
-* **Robust** – catches per-row HTTP errors without stopping the run.
-* **Typed & logged** – uses ``logging`` for progress instead of ``print``.
-"""
 from __future__ import annotations
 
 import argparse
-import ast
+import json
 import logging
 import time
 from pathlib import Path
@@ -114,43 +37,69 @@ from typing import List
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-# ---------------------------------------------------------------------------
-# Default config (overridden by CLI)
-# ---------------------------------------------------------------------------
-DEFAULT_INPUT  = "merged_wikipedia_modern.csv"
-DEFAULT_OUTPUT = "merged_wikipedia_modern_with_text.csv"
+# ---------------- Configuration (CLI-overridable) ----------------
+DEFAULT_INPUT  = "modern_01_wikipedia_candidates.csv"          # default output of modern_01
+DEFAULT_OUTPUT = "modern_02_wikipedia_candidates_with_text.csv"
 DEFAULT_BATCH  = 100
-TIMEOUT        = 60  # seconds
-SLEEP_SEC      = 0.3  # politeness delay
+TIMEOUT        = 60     # seconds
+SLEEP_SEC      = 0.3    # polite delay between requests
 USER_AGENT     = "ModernHansardBot/1.0 (+https://example.com)"
 
-# Column names
 TXT_COL_1 = "wikipedia_text_1"
 TXT_COL_2 = "wikipedia_text_2"
-
-# ---------------------------------------------------------------------------
-# HTTP session (module-level reuse)
-# ---------------------------------------------------------------------------
-_SESSION = requests.Session()
-_SESSION.headers.update({"User-Agent": USER_AGENT})
+LINKS_COL = "wikipedia_links"
+PRELOAD_COL = "wikipedia_full_texts"
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ---------------- HTTP session with retries ----------------
+def make_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({"User-Agent": USER_AGENT})
+    retry = Retry(
+        total=4,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+_SESSION = make_session()
+
+
+# ---------------- Helpers ----------------
+def parse_json_list(cell) -> List[str]:
+    """Parse a JSON-encoded list; return [] if invalid/blank."""
+    if not isinstance(cell, str) or not cell.strip():
+        return []
+    try:
+        data = json.loads(cell)
+        return data if isinstance(data, list) else []
+    except Exception:
+        # Fallback for legacy Python-literal list strings
+        try:
+            import ast
+            data = ast.literal_eval(cell)
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
 
 def fetch_soup(url: str) -> BeautifulSoup:
-    """Return parsed HTML for *url* (raises ``requests`` errors if any)."""
-    resp = _SESSION.get(url, timeout=TIMEOUT)
-    resp.raise_for_status()
-    return BeautifulSoup(resp.text, "html.parser")
+    r = _SESSION.get(url, timeout=TIMEOUT)
+    r.raise_for_status()
+    return BeautifulSoup(r.text, "html.parser")
 
 
 def extract_full_text(soup: BeautifulSoup) -> str:
-    """Flatten intro, headings, paragraphs, lists, tables, infobox → plain text."""
+    """Flatten intro, headings, paragraphs, lists, tables, infobox into one text block."""
     parts: List[str] = ["Main text:", ""]
-
     main = soup.select_one("#mw-content-text .mw-parser-output")
     if main:
         for tag in main.find_all(["p", "h2", "h3", "li", "table"]):
@@ -164,72 +113,93 @@ def extract_full_text(soup: BeautifulSoup) -> str:
         for row in box.find_all("tr"):
             th, td = row.find("th"), row.find("td")
             if th and td:
-                key = th.get_text(" ", strip=True)
-                val = td.get_text(" ", strip=True)
-                if key and val:
-                    parts.append(f"{key}: {val}")
+                k = th.get_text(" ", strip=True)
+                v = td.get_text(" ", strip=True)
+                if k and v:
+                    parts.append(f"{k}: {v}")
 
     return "\n".join(parts).strip()
 
 
-# ---------------------------------------------------------------------------
-# Core logic
-# ---------------------------------------------------------------------------
+def maybe_copy_preloaded_texts(row: pd.Series) -> bool:
+    """
+    If the CSV already has wikipedia_full_texts (from modern_01 without --no-download),
+    copy those texts into wikipedia_text_1/2. Returns True if values were copied.
+    """
+    if PRELOAD_COL not in row or not isinstance(row[PRELOAD_COL], str):
+        return False
+    texts = parse_json_list(row[PRELOAD_COL])
+    if not texts:
+        return False
 
+    t1 = texts[0] if len(texts) >= 1 and isinstance(texts[0], str) else ""
+    t2 = texts[1] if len(texts) >= 2 and isinstance(texts[1], str) else ""
+    row[TXT_COL_1] = t1
+    row[TXT_COL_2] = t2
+    return bool(t1 or t2)
+
+
+# ---------------- Core ----------------
 def process_csv(input_path: Path, output_path: Path, batch_size: int) -> None:
-    """Fill ``wikipedia_text_1/2`` columns for every row in *input_path*."""
     logging.info("Loading %s", input_path)
     df = pd.read_csv(input_path, dtype=str)
 
-    # ensure list type in-memory
-    df["wikipedia_links"] = df["wikipedia_links"].apply(
-        lambda x: ast.literal_eval(x) if isinstance(x, str) else []
-    )
+    if LINKS_COL not in df.columns:
+        raise SystemExit(f"Input CSV must contain column '{LINKS_COL}'.")
 
-    # add empty columns if missing (makes script resumable)
+    # Ensure output columns exist (resumable)
     for col in (TXT_COL_1, TXT_COL_2):
         if col not in df.columns:
             df[col] = ""
 
-    total_rows = len(df)
+    total = len(df)
     for idx in df.index:
-        # skip row if both texts already exist (resume support)
-        if df.at[idx, TXT_COL_1] and df.at[idx, TXT_COL_2]:
+        # Skip row if already filled (resume support)
+        if str(df.at[idx, TXT_COL_1]).strip() and str(df.at[idx, TXT_COL_2]).strip():
             continue
 
-        links: List[str] = df.at[idx, "wikipedia_links"]
-        texts = ["", ""]
+        row = df.loc[idx].copy()
 
-        for i in range(min(2, len(links))):
-            url = links[i]
-            try:
-                texts[i] = extract_full_text(fetch_soup(url))
-            except Exception as exc:  # pylint: disable=broad-except
-                logging.warning("[%d] failed to fetch %s: %s", idx, url, exc)
-            time.sleep(SLEEP_SEC)
-
-        df.at[idx, TXT_COL_1], df.at[idx, TXT_COL_2] = texts
+        # If modern_01 already downloaded full texts, copy them over
+        if maybe_copy_preloaded_texts(row):
+            df.loc[idx, [TXT_COL_1, TXT_COL_2]] = row[[TXT_COL_1, TXT_COL_2]]
+        else:
+            # Otherwise, fetch from wikipedia_links
+            links = parse_json_list(df.at[idx, LINKS_COL])
+            texts = ["", ""]
+            for i in range(min(2, len(links))):
+                url = links[i]
+                try:
+                    texts[i] = extract_full_text(fetch_soup(url))
+                except Exception as e:
+                    logging.warning("[%d] failed to fetch %s: %s", idx, url, e)
+                time.sleep(SLEEP_SEC)
+            df.at[idx, TXT_COL_1] = texts[0]
+            df.at[idx, TXT_COL_2] = texts[1]
 
         if (idx + 1) % batch_size == 0:
             df.to_csv(output_path, index=False, encoding="utf-8-sig")
-            logging.info("Checkpointed %d/%d rows", idx + 1, total_rows)
+            logging.info("Checkpointed %d/%d rows", idx + 1, total)
 
     df.to_csv(output_path, index=False, encoding="utf-8-sig")
-    logging.info("Done – written %s", output_path)
+    logging.info("Done → %s", output_path)
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download & flatten Wikipedia articles for modern Hansard links.")
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="Input CSV path (default: %(default)s)")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output CSV path (default: %(default)s)")
-    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH, help="Rows processed before checkpoint save")
-    parser.add_argument("--log-level", default="INFO", choices=[
-        "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Logging verbosity")
-    return parser.parse_args()
+# ---------------- CLI ----------------
+def parse_args() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Download & flatten Wikipedia articles for modern Hansard candidates."
+    )
+    p.add_argument("--input", type=Path, default=DEFAULT_INPUT,
+                   help="Input CSV (output of modern_01_collect_wikipedia_candidates.py)")
+    p.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
+                   help="Output CSV path")
+    p.add_argument("--batch-size", type=int, default=DEFAULT_BATCH,
+                   help="Rows between checkpoints")
+    p.add_argument("--log-level", default="INFO",
+                   choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                   help="Logging verbosity")
+    return p
 
 
 def main() -> None:
@@ -240,11 +210,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-    if (idx + 1) % BATCH_SIZE == 0:
-        df.to_csv(OUTPUT_CSV, index=False)
-        print(f"✅ Saved first {idx + 1} rows to {OUTPUT_CSV}")
-
-# ==== 4. Final save =========================================================
-
-df.to_csv(OUTPUT_CSV, index=False)
