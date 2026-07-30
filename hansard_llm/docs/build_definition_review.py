@@ -1,16 +1,13 @@
-"""Build a self-contained definition-disagreement review page (gold-set worklist).
+"""Build a self-contained definition-comparison review page.
 
-For every pilot speech it shows, side by side, what the models judged under the
-two construct definitions (``current`` and ``era_neutral``), sorted so the
-speeches where the definitions disagree most come first. Those are exactly the
-cases where the construct boundary is doing real work, so they are the efficient
-place to spend expert labelling time.
+Embeds every construct definition that has been run on the shipping default
+(role=none, uncapped, both formats, all models) and lets the reader pick which
+pair to compare. Presets cover the original current-vs-era_neutral contrast and
+the expert-definition arm (HC→SC vs SC→HC, and each against current).
 
 Unlike the cap explorer this page also *collects* judgements: each speech can be
 marked H&SC / borderline / not H&SC with a free-text note, held in the browser's
-local storage and exported as CSV. Neither definition is styled as the correct
-one, because the pilot cannot establish that; the whole point of the exercise is
-that a human decides.
+local storage and exported as CSV. No definition is styled as the correct one.
 
 Usage:  python -m hansard_llm.docs.build_definition_review
 Writes: hansard_llm/docs/definition_review.html
@@ -34,8 +31,25 @@ MODEL_LABELS = {
 }
 MODEL_ORDER = list(MODEL_LABELS)
 FORMATS = ("json", "free")
-DEFS = ("current", "era_neutral")
-DEF_LABELS = {"current": "Current definition", "era_neutral": "Era-neutral definition"}
+
+# Every definition with cached shipping-default cells. Order is display order.
+DEFS = ("current", "era_neutral", "expert_hc_sc", "expert_sc_hc")
+DEF_LABELS = {
+    "current": "Current",
+    "era_neutral": "Era-neutral",
+    "expert_hc_sc": "Expert HC→SC",
+    "expert_sc_hc": "Expert SC→HC",
+}
+PRESETS = (
+    {"id": "expert_order", "label": "Expert order (HC→SC vs SC→HC)",
+     "a": "expert_hc_sc", "b": "expert_sc_hc"},
+    {"id": "current_era", "label": "Current vs era-neutral",
+     "a": "current", "b": "era_neutral"},
+    {"id": "current_hc", "label": "Current vs expert HC→SC",
+     "a": "current", "b": "expert_hc_sc"},
+    {"id": "current_sc", "label": "Current vs expert SC→HC",
+     "a": "current", "b": "expert_sc_hc"},
+)
 
 
 def _cell(row) -> dict:
@@ -50,8 +64,8 @@ def _cell(row) -> dict:
 
 def build_data() -> list[dict]:
     df = run.load_results()
-    # Matched on the shipping default (role=none, uncapped, temp0) so the only
-    # thing differing between the two arms is the definition text.
+    # Matched on the shipping default so the only thing differing across arms
+    # is the definition text.
     df = df[(df["condition"] == "temp0") & (df["role"] == "none")
             & (df["task"] == "v1_nocap")
             & (df["definition"].isin(DEFS))
@@ -77,13 +91,13 @@ def build_data() -> list[dict]:
                         votes[d].append(1 if c["present"] else 0)
                 cells[fmt][mid] = entry
 
-        rates = {d: (float(np.mean(v)) if v else None) for d, v in votes.items()}
-        cur, era = rates["current"], rates["era_neutral"]
-        gain = None if (cur is None or era is None) else round(era - cur, 3)
-        # How split the models are *within* a definition: 0 = unanimous,
-        # 1 = an even 50/50 divide. Reported as the worse (more split) of the two,
-        # since either kind of split makes the speech worth a human read.
-        split = max((0.0 if r is None else 2 * min(r, 1 - r)) for r in rates.values())
+        rates = {d: (None if not v else round(float(np.mean(v)), 2))
+                 for d, v in votes.items()}
+        # Worst within-definition split across all defs (for the "models split"
+        # filter). 0 = unanimous, 1 = even 50/50.
+        split = max(
+            (0.0 if r is None else 2 * min(r, 1 - r)) for r in rates.values()
+        )
         out.append({
             "id": str(sid),
             "year": int(m["year"]),
@@ -93,13 +107,10 @@ def build_data() -> list[dict]:
             "section": str(m["section_title"]),
             "era": str(m["era"]),
             "text": str(m["speech_text"]),
-            "cur": None if cur is None else round(cur, 2),
-            "era_rate": None if era is None else round(era, 2),
-            "gain": gain,
+            "rates": rates,
             "split": round(split, 2),
             "cells": cells,
         })
-    out.sort(key=lambda s: abs(s["gain"] or 0), reverse=True)
     return out
 
 
@@ -125,18 +136,23 @@ body{margin:0;font:15px/1.5 "Segoe UI",system-ui,sans-serif;background:var(--bg)
 header{padding:18px 22px;border-bottom:1px solid var(--line)}
 h1{font-size:19px;margin:0 0 4px}
 .sub{color:var(--muted);font-size:13.5px;max-width:78ch}
-details.defs{margin-top:10px;font-size:13px;max-width:78ch}
+details.defs{margin-top:10px;font-size:13px;max-width:90ch}
 details.defs summary{cursor:pointer;color:var(--muted)}
-.defbox{padding:8px 11px;border-radius:8px;margin-top:7px;border:1px solid var(--line)}
-.defbox.a{background:var(--abg)} .defbox.b{background:var(--bbg)}
-.defbox b{display:block;margin-bottom:3px;font-size:12.5px}
-.defbox.a b{color:var(--a)} .defbox.b b{color:var(--b)}
+.deflist{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px}
+@media (max-width:720px){.deflist{grid-template-columns:1fr}}
+.defbox{padding:8px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.defbox b{display:block;margin-bottom:3px;font-size:12.5px;color:var(--b)}
+.defbox.active-a{background:var(--abg);border-color:var(--a)}
+.defbox.active-a b{color:var(--a)}
+.defbox.active-b{background:var(--bbg);border-color:var(--b)}
+.defbox.active-b b{color:var(--b)}
 .controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:12px 22px;
   border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
 .controls label{font-size:12.5px;color:var(--muted);margin-right:4px}
 select,button{font:inherit;font-size:13px;padding:5px 9px;border:1px solid var(--line);
   border-radius:7px;background:var(--bg);color:var(--ink);cursor:pointer}
 select#pick{min-width:min(520px,54vw)}
+select#preset{min-width:min(280px,40vw)}
 button:hover{border-color:var(--b)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
 .seg button{border:0;border-radius:0;background:var(--bg)}
@@ -171,27 +187,28 @@ th.col-a{color:var(--a)} th.col-b{color:var(--b)}
 .none{color:var(--muted);font-style:italic;font-size:12.5px}
 .hint{font-size:12px;color:var(--muted);margin:2px 0 14px}
 .flip{box-shadow:inset 3px 0 0 var(--maybe)}
+.summary{display:flex;flex-wrap:wrap;gap:10px 18px;font-size:13px;color:var(--muted);margin-bottom:10px}
+.summary b{color:var(--ink)}
 </style>
 </head>
 <body>
 <header>
   <h1>Definition review</h1>
-  <div class="sub">The pilot cannot tell us which definition of health and social
-  care is the right one, only that the choice moves the answer a lot. This page
-  puts the two side by side on the speeches where they disagree most, so the call
-  can be made by someone who knows the field. Your judgement is the gold standard
-  we will score the pipeline against; the model columns are shown for context, not
-  as something to agree with.</div>
-  <details class="defs"><summary>The two definitions being compared</summary>
-    <div class="defbox a"><b>Current</b>__DEF_A__</div>
-    <div class="defbox b"><b>Era-neutral</b>__DEF_B__</div>
-    <div style="margin-top:7px;color:var(--muted)">Both are dropped into the same
+  <div class="sub">Compare construct definitions side by side on the same
+  speeches, models and formats. Pick a preset to focus on the expert-order arm
+  or on the original current-vs-era-neutral contrast. Your judgement is the gold
+  standard we will score the pipeline against; the model columns are context, not
+  something to agree with.</div>
+  <details class="defs"><summary>Definition texts</summary>
+    <div class="deflist" id="deflist"></div>
+    <div style="margin-top:7px;color:var(--muted)">Each is dropped into the same
     sentence: "Determine whether the speech substantively discusses health and
     social care, that is, [definition], rather than merely mentioning it in
     passing."</div>
   </details>
 </header>
 <div class="controls">
+  <span><label>Compare</label><select id="preset"></select></span>
   <span><label>Speech</label><select id="pick"></select></span>
   <button id="prev">Prev</button><button id="next">Next</button>
   <span><label>Show</label><select id="filter">
@@ -212,6 +229,7 @@ th.col-a{color:var(--a)} th.col-b{color:var(--b)}
   <span class="prog" id="prog"></span>
 </div>
 <main>
+  <div class="summary" id="summary"></div>
   <div class="meta" id="meta"></div>
   <div class="speech" id="speech"></div>
   <div class="judge">
@@ -224,55 +242,90 @@ th.col-a{color:var(--a)} th.col-b{color:var(--b)}
     <textarea id="note" placeholder="Optional: why? Which definition gets it right, and what would you change in the wording?"></textarea>
   </div>
   <div class="hint">Rows marked with an amber edge are cells where the two
-  definitions reached different verdicts on the same speech, same model, same
-  format. Percentages are the share of the 8 reads (4 models x 2 formats) that
-  said yes under each definition.</div>
+  selected definitions reached different verdicts on the same speech, same model,
+  same format. Percentages are the share of the 8 reads (4 models × 2 formats)
+  that said yes under each definition.</div>
   <table><thead><tr><th>Model</th>
-    <th class="col-a">Current definition</th>
-    <th class="col-b">Era-neutral definition</th></tr></thead>
+    <th class="col-a" id="tha">A</th>
+    <th class="col-b" id="thb">B</th></tr></thead>
   <tbody id="rows"></tbody></table>
 </main>
 <script id="data" type="application/json">__DATA__</script>
 <script id="models" type="application/json">__MODELS__</script>
+<script id="meta_json" type="application/json">__META__</script>
 <script>
 const DATA = JSON.parse(document.getElementById("data").textContent);
 const MODELS = JSON.parse(document.getElementById("models").textContent);
-const KEY = "hansard_def_review_v1";
+const META = JSON.parse(document.getElementById("meta_json").textContent);
+const KEY = "hansard_def_review_v2";
 let labels = {};
 try { labels = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch(e) { labels = {}; }
 let order = [], pos = 0, fmt = "json";
+let pair = {a: META.presets[0].a, b: META.presets[0].b};
 
 const pick = document.getElementById("pick");
+const presetEl = document.getElementById("preset");
 const esc = s => { const d=document.createElement("div"); d.textContent=s; return d.innerHTML; };
 const pct = v => v==null ? "—" : Math.round(v*100)+"%";
+const labelOf = id => META.labels[id] || id;
+function gapOf(s){
+  const ra = s.rates[pair.a], rb = s.rates[pair.b];
+  if(ra==null || rb==null) return null;
+  return Math.round((rb - ra)*1000)/1000;
+}
 function gapColor(g){ if(g==null) return "#7c848c"; const a=Math.abs(g);
   if(a>=0.5) return "#b1382f"; if(a>=0.25) return "#c9781a"; if(a>0) return "#8a6d3b"; return "#7c848c"; }
 const gapLabel = g => g==null ? "n/a" : (g>0?"+":"")+Math.round(g*100)+"pp";
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(labels)); } catch(e){} }
 
+function renderDefList(){
+  document.getElementById("deflist").innerHTML = META.defs.map(d=>{
+    const cls = d.id===pair.a ? " active-a" : d.id===pair.b ? " active-b" : "";
+    return `<div class="defbox${cls}"><b>${esc(d.label)}</b>${esc(d.text)}</div>`;
+  }).join("");
+}
+function pairSummary(){
+  let disagree=0, aOnly=0, bOnly=0;
+  DATA.forEach(s=>{
+    const g = gapOf(s);
+    if(g==null || g===0) return;
+    disagree++;
+    if(g>0) bOnly++; else aOnly++;
+  });
+  document.getElementById("summary").innerHTML =
+    `<span>Comparing <b>${esc(labelOf(pair.a))}</b> → <b>${esc(labelOf(pair.b))}</b></span>`+
+    `<span>Speeches where rates differ: <b>${disagree}</b> / ${DATA.length}</span>`+
+    `<span>${esc(labelOf(pair.a))} higher: <b>${aOnly}</b></span>`+
+    `<span>${esc(labelOf(pair.b))} higher: <b>${bOnly}</b></span>`;
+  document.getElementById("tha").textContent = labelOf(pair.a);
+  document.getElementById("thb").textContent = labelOf(pair.b);
+}
 function passes(s){
   const f = document.getElementById("filter").value;
-  if(f==="disagree") return s.gain!=null && Math.abs(s.gain)>0;
+  const g = gapOf(s);
+  if(f==="disagree") return g!=null && Math.abs(g)>0;
   if(f==="split") return s.split>0;
   if(f==="unlabelled") return !(labels[s.id] && labels[s.id].v);
   return true;
 }
 function rebuild(keepId){
+  pairSummary();
+  renderDefList();
   const key = document.getElementById("sort").value;
   order = DATA.map((_,i)=>i).filter(i=>passes(DATA[i]));
   if(!order.length) order = DATA.map((_,i)=>i);
-  const gap = i => Math.abs(DATA[i].gain==null ? -1 : DATA[i].gain);
+  const gap = i => Math.abs(gapOf(DATA[i])==null ? -1 : gapOf(DATA[i]));
   if(key==="gap") order.sort((a,b)=>gap(b)-gap(a));
   else if(key==="split") order.sort((a,b)=>DATA[b].split-DATA[a].split || gap(b)-gap(a));
   else order.sort((a,b)=>DATA[a].year-DATA[b].year || gap(b)-gap(a));
   pick.innerHTML = order.map((idx,i)=>{ const s=DATA[idx];
     const mark = labels[s.id] && labels[s.id].v ? "* " : "";
-    return `<option value="${i}">${mark}${s.year} · ${esc(s.section).slice(0,52)} — gap ${gapLabel(s.gain)}</option>`;
+    return `<option value="${i}">${mark}${s.year} · ${esc(s.section).slice(0,52)} — gap ${gapLabel(gapOf(s))}</option>`;
   }).join("");
   const at = keepId==null ? 0 : Math.max(0, order.findIndex(i=>DATA[i].id===keepId));
   pos = at<0 ? 0 : at; pick.value = pos; render();
 }
-function cellHtml(c, other){
+function cellHtml(c){
   if(!c) return `<span class="none">no data</span>`;
   if(c.present===null) return `<span class="none">unparsed</span>`;
   const badge = c.present ? `<span class="yesno y">YES</span>`
@@ -285,17 +338,19 @@ function cellHtml(c, other){
 }
 function render(){
   const s = DATA[order[pos]];
+  const g = gapOf(s);
+  const ra = s.rates[pair.a], rb = s.rates[pair.b];
   document.getElementById("meta").innerHTML =
     `<span><b>${s.year}</b> · ${esc(s.chamber)}</span>`+
     `<span>${esc(s.section)}</span>`+
     `<span>${s.words} words · ${esc(s.type)}</span>`+
-    `<span class="pill" style="background:${gapColor(s.gain)}">gap ${gapLabel(s.gain)} `+
-    `(current ${pct(s.cur)} → era-neutral ${pct(s.era_rate)})</span>`;
+    `<span class="pill" style="background:${gapColor(g)}">gap ${gapLabel(g)} `+
+    `(${esc(labelOf(pair.a))} ${pct(ra)} → ${esc(labelOf(pair.b))} ${pct(rb)})</span>`;
   document.getElementById("speech").textContent = s.text;
   const cells = s.cells[fmt];
   document.getElementById("rows").innerHTML = MODELS.map(m=>{
     const c = cells[m.id] || {};
-    const a = c.current, b = c.era_neutral;
+    const a = c[pair.a], b = c[pair.b];
     const flip = a && b && a.present!==null && b.present!==null && a.present!==b.present;
     const k = flip ? " flip" : "";
     return `<tr><td class="model">${esc(m.label)}</td>`+
@@ -327,17 +382,25 @@ document.getElementById("note").oninput = ()=>{
 document.getElementById("export").onclick = ()=>{
   const q = v => `"${String(v==null?"":v).replace(/"/g,'""')}"`;
   const rows = [["speech_id","year","section","expert_label","note",
-                 "current_rate","era_neutral_rate","gap","model_split"].join(",")];
+                 "def_a","rate_a","def_b","rate_b","gap","model_split"].join(",")];
   DATA.forEach(s=>{ const r = labels[s.id] || {};
     if(!r.v && !r.note) return;
+    const g = gapOf(s);
     rows.push([q(s.id),s.year,q(s.section),q(r.v||""),q(r.note||""),
-               s.cur,s.era_rate,s.gain,s.split].join(","));
+               q(pair.a),s.rates[pair.a],q(pair.b),s.rates[pair.b],g,s.split].join(","));
   });
   const blob = new Blob([rows.join("\n")], {type:"text/csv"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "definition_review_labels.csv";
   a.click(); URL.revokeObjectURL(a.href);
+};
+presetEl.innerHTML = META.presets.map(p=>
+  `<option value="${p.id}">${esc(p.label)}</option>`).join("");
+presetEl.onchange = ()=>{
+  const p = META.presets.find(x=>x.id===presetEl.value);
+  pair = {a:p.a, b:p.b};
+  rebuild();
 };
 document.getElementById("filter").onchange = ()=>rebuild();
 document.getElementById("sort").onchange = ()=>rebuild(DATA[order[pos]].id);
@@ -367,20 +430,38 @@ rebuild();
 def main():
     data = build_data()
     models = [{"id": m, "label": MODEL_LABELS[m]} for m in MODEL_ORDER]
+    meta = {
+        "defs": [
+            {"id": d, "label": DEF_LABELS[d],
+             "text": config.HSC_DEFINITIONS[d].description}
+            for d in DEFS
+        ],
+        "labels": DEF_LABELS,
+        "presets": list(PRESETS),
+    }
     j = lambda o: json.dumps(o, ensure_ascii=False).replace("</", "<\\/")
     html = (PAGE.replace("__DATA__", j(data))
                 .replace("__MODELS__", j(models))
-                .replace("__DEF_A__", config.HSC_DEFINITIONS["current"].description)
-                .replace("__DEF_B__", config.HSC_DEFINITIONS["era_neutral"].description))
+                .replace("__META__", j(meta)))
     OUT.write_text(html, encoding="utf-8")
 
-    contested = [s for s in data if s["gain"] and abs(s["gain"]) > 0]
-    big = [s for s in data if s["gain"] and abs(s["gain"]) >= 0.25]
+    # Report under the default preset (expert order).
+    a, b = PRESETS[0]["a"], PRESETS[0]["b"]
+    contested = []
+    for s in data:
+        ra, rb = s["rates"].get(a), s["rates"].get(b)
+        if ra is None or rb is None:
+            continue
+        gap = abs(rb - ra)
+        if gap > 0:
+            contested.append((gap, s["year"], s["section"], ra, rb))
+    contested.sort(reverse=True)
     print(f"wrote {OUT}  ({len(html)/1e6:.2f} MB, {len(data)} speeches)")
-    print(f"  contested (definitions differ at all): {len(contested)}")
-    print(f"  substantial gap (>=25pp)             : {len(big)}")
-    print(f"  top: {data[0]['year']} '{data[0]['section'][:44]}' "
-          f"{data[0]['cur']} -> {data[0]['era_rate']}")
+    print(f"  defs embedded: {DEFS}")
+    print(f"  expert-order contested: {len(contested)}")
+    if contested:
+        gap, year, section, ra, rb = contested[0]
+        print(f"  top: {year} '{section[:44]}' {ra} -> {rb} (gap {gap:+.2f})")
 
 
 if __name__ == "__main__":

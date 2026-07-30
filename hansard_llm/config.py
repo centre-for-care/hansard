@@ -216,6 +216,11 @@ DEFAULT_TOPIC = HEALTH_SOCIAL_CARE
 # ``broad_determinants`` bracket the construct from either side so the headline
 # prevalence can be reported as a sensitivity band rather than a point estimate.
 #
+# The expert arm replaces the pilot wordings with domain-expert definitions of
+# healthcare and social care. Because the construct of interest is speeches
+# about *both*, the two texts are concatenated; ``expert_hc_sc`` vs
+# ``expert_sc_hc`` isolates whether presentation order moves the result.
+#
 # Only ``description`` varies. Name, seed regex and cap are held constant, so
 # the contrast is the definition and nothing else.
 _DEFINITION_TEXT = {
@@ -239,13 +244,37 @@ _DEFINITION_TEXT = {
     ),
 }
 
+# Expert-sourced component texts (domain-provided). Combined below in both
+# orders so order effects can be measured without inventing new wording.
+_EXPERT_HEALTHCARE = (
+    "Healthcare is primarily concerned with the prevention, diagnosis and "
+    "treatment of illness."
+)
+_EXPERT_SOCIAL_CARE = (
+    "Social care provides practical support to people who need assistance "
+    "with everyday living because of age, disability, chronic illness or "
+    "other long-term needs. Typical services include residential care, care "
+    "homes, home care, support for carers and services for adults with "
+    "disabilities."
+)
+
+_EXPERT_DEFINITION_TEXT = {
+    # Healthcare first, then social care.
+    "expert_hc_sc": f"{_EXPERT_HEALTHCARE} {_EXPERT_SOCIAL_CARE}",
+    # Social care first, then healthcare.
+    "expert_sc_hc": f"{_EXPERT_SOCIAL_CARE} {_EXPERT_HEALTHCARE}",
+}
+
 HSC_DEFINITIONS: dict[str, Topic] = {
     "current": HEALTH_SOCIAL_CARE,
     **{
         key: replace(HEALTH_SOCIAL_CARE, description=text, definition_id=key)
-        for key, text in _DEFINITION_TEXT.items()
+        for key, text in {**_DEFINITION_TEXT, **_EXPERT_DEFINITION_TEXT}.items()
     },
 }
 
-# The three that are not yet cached; ``current`` already ran as the uncapped arm.
-ALT_DEFINITIONS: tuple[str, ...] = tuple(_DEFINITION_TEXT)
+# New uncached arms for the next definition run. Prior alts
+# (era_neutral / narrow_clinical / broad_determinants) stay in
+# HSC_DEFINITIONS so cached rows remain joinable; pass them explicitly via
+# ``--definitions`` if you need to re-run or extend them.
+ALT_DEFINITIONS: tuple[str, ...] = tuple(_EXPERT_DEFINITION_TEXT)

@@ -206,7 +206,7 @@ entirely one way: the era-neutral wording adds speeches, in 23% of pre-1900 read
 but only 7% of post-1948 ones. On this evidence a good part of the apparent
 growth in health debate after the NHS is an artefact of how we asked the question.
 
-![Share of speeches judged to be about H&SC, by era, under the two definitions. Neither is known to be correct; the point is that the choice of wording, not the record, sets much of the slope.](fig_definition_era.png)
+![Share of speeches judged to be about H&SC, by era, under four construct definitions. Neither is known to be correct; the point is that the choice of wording, not the record, sets much of the slope.](fig_definition_era.png)
 
 This does not establish that the era-neutral wording is the right one. Reading the
 speeches it newly admits shows both kinds of case. Some are plain misses by the
@@ -224,6 +224,32 @@ not stop the models keying on institution names instead of on whether care is th
 subject of the speech. Choosing between the two wordings, and repairing whichever
 we keep so that neither trap fires, is a domain judgement and not something a
 further run can settle.
+
+**An expert definition of both healthcare and social care lands close to
+current, not to era-neutral.** Domain experts supplied separate sentences for
+healthcare ("primarily concerned with the prevention, diagnosis and treatment of
+illness") and social care ("practical support to people who need assistance with
+everyday living…"). Because the construct of interest is speeches about *both*,
+the two sentences were concatenated and run as a new definition arm under the
+same shipping default (no role, no cap, both formats, all models). Two orders
+were tested: healthcare then social care, and social care then healthcare. The
+headline rates sit next to current rather than next to era-neutral: 51% under
+HC→SC and 46% under SC→HC, against 48% for current and 62% for era-neutral.
+Matched-cell agreement with current is 88% and 87% respectively; speech-level
+majority labels agree with current on 96% and 93% of speeches. The era profile
+tells the same story (Figure 2): both expert orders keep a steep post-1948 rise
+(+24 and +23 percentage points from pre-1900), close to current (+29) and far
+from era-neutral (+13). So replacing the pilot wording with the expert sentences
+does not, by itself, undo the NHS-era climb that the earlier definition contrast
+flagged as partly artefactual. The order of the two sentences is a real but
+secondary effect: HC-first is about five points more inclusive than SC-first on
+matched cells (89% agreement; 166 cells yes only under HC→SC versus 62 only under
+SC→HC), and only 17 of 270 speeches flip their majority label. Free-text output
+is more order-sensitive than structured output; one model (Llama-70B) is almost
+order-invariant. If a single expert wording is shipped, HC→SC is the closer twin
+of the current pilot definition. The contested speeches under each pair —
+expert-order flips, and current versus either expert arm — can be inspected in
+`definition_review.html`, which now lets the reader switch comparison presets.
 
 **The prompt's output format changes the result.** Each read was asked either for
 free-text output or for structured output, and this matters more than expected.
@@ -280,10 +306,14 @@ seeing:
 
 Taken together, the prevalence numbers depend jointly on the definition, the
 output format, the five-topic cap, and the clustering threshold. We can now put
-rough sizes on the first two: the definition moves the era profile by around 16
-percentage points of slope, and the output format moves the headline rate by about
-12 points. None of the four is settled by the machine, which is precisely why the
-next step is substantive rather than technical.
+rough sizes on the first two: switching from the current wording to era-neutral
+moves the era profile by around 16 percentage points of slope, while swapping in
+the expert healthcare-plus-social-care wording leaves that slope largely intact
+(+23 to +24 pp rather than +29) and moves the headline rate by only a few points;
+presentation order within the expert wording adds about another 5 points. The
+output format moves the headline rate by about 12 points under every definition
+tested. None of these is settled by the machine, which is precisely why the next
+step is substantive rather than technical.
 
 ## 6. What we need next
 
@@ -292,10 +322,13 @@ Two pieces of work now need domain input, and they are the reason for this brief
 The first is a substantive review of the current map:
 
 1. Scope. Section 5 shows the definition is the most consequential setting we
-   have found, and the pilot cannot resolve it: the two wordings we tested fail in
-   opposite directions. Which is closer to how the field bounds H&SC, and how
-   would you word it so that neither the NHS nor the Poor Law Board pulls a speech
-   in on the strength of being mentioned?
+   have found, and the pilot cannot resolve it alone: the era-neutral wording
+   fails in the opposite direction from the current one, while the expert
+   healthcare-plus-social-care wording tracks current closely and does not
+   remove the post-1948 climb. Which bound is closer to how the field thinks of
+   H&SC, should the expert sentences be preferred as the shipping text (and in
+   which order), and how would you word the construct so that neither the NHS
+   nor the Poor Law Board pulls a speech in on the strength of being mentioned?
 2. Completeness. Is any important H&SC theme missing that Parliament would have
    debated across this period?
 3. Correctness. Is any listed topic wrong, or wrongly counted as H&SC?
@@ -315,9 +348,13 @@ To close that gap we need to build, together:
   actually being decided rather than being obvious. They are laid out in
   `definition_review.html`, an offline page that shows each speech next to what the
   models said under both definitions and records a yes, borderline or no judgement
-  with a note, then exports the lot as a spreadsheet. Working through the contested
-  set is worth considerably more per speech than labelling a random sample, in
-  which most cases are easy and carry little information.
+  with a note, then exports the lot as a spreadsheet. The same page now also covers
+  the expert-definition arm: a preset switches the columns to HC→SC versus SC→HC
+  (or either expert arm against current), so the 17 majority-label order flips and
+  the larger current-versus-expert disagreements can be reviewed the same way.
+  Working through the contested set is worth considerably more per speech than
+  labelling a random sample, in which most cases are easy and carry little
+  information.
 - An evaluation protocol we can re-run unchanged whenever a model, prompt, or
   threshold changes: presence scored against the gold labels, and sub-topics
   scored on whether the model's topics match the experts' in meaning.
@@ -360,7 +397,7 @@ instruction. The pilot also uses this second, meaning-preserving paraphrase:
 Role and output format vary as in Section 2 (role present or absent, output
 structured or free text), giving eight prompt combinations in all.
 
-C. Definition wordings tested. Both are dropped into the same slot in the
+C. Definition wordings tested. Each is dropped into the same slot in the
 instruction, after "substantively discusses health and social care, that is,".
 Everything else in the prompt is identical, so the contrast between them is the
 definition and nothing else.
@@ -373,12 +410,21 @@ definition and nothing else.
 > for, whether by the state, local authorities, hospitals, charities, religious
 > bodies or families.
 
-Two further wordings, one narrower (clinical services only) and one broader
+> Expert healthcare: Healthcare is primarily concerned with the prevention,
+> diagnosis and treatment of illness.
+
+> Expert social care: Social care provides practical support to people who need
+> assistance with everyday living because of age, disability, chronic illness or
+> other long-term needs. Typical services include residential care, care homes,
+> home care, support for carers and services for adults with disabilities.
+
+The expert arm concatenates those two sentences in both orders (HC→SC and SC→HC)
+so that order effects can be measured without inventing new wording. Two further
+wordings prepared earlier, one narrower (clinical services only) and one broader
 (including the social determinants of health such as housing, sanitation and
-nutrition), are prepared but not yet run. They are intended to bracket the
-construct so the headline prevalence can be reported as a range rather than a
-single number, and are worth running once the definition question above is
-settled.
+nutrition), are still available in config but have not been run; they would bracket
+the construct so the headline prevalence can be reported as a range rather than a
+single number.
 
 D. Extended topic list, ranks 41 to 100. This continues the table in Section 4. Of
 the roughly 700 machine-discovered topics, 141 are raised by four or more speeches.
@@ -474,9 +520,10 @@ vocabulary and how much case and wording variation there is.
 
 F. Pilot facts. 270 speeches, read by four models under eight prompt wordings each
 (32 reads per speech at temperature zero), producing 8,692 distinct sub-topic
-phrases and 15,634 total phrase emissions. That core grid is accompanied by two
-controlled experiments of 2,160 reads each, matched to it on speech, model and
-format: the uncapped arm behind Section 5's cap finding, and the era-neutral arm
-behind the definition finding. The sample spans 1803 to the present. Sub-topics are
-generated by the models rather than chosen from a list. All figures come from the
-current pilot run.
+phrases and 15,634 total phrase emissions. That core grid is accompanied by
+controlled experiments matched to it on speech, model and format: the uncapped arm
+behind Section 5's cap finding (2,160 reads), the era-neutral definition arm
+(2,160 reads), and the expert-definition arm in both sentence orders (4,320
+reads). The sample spans 1803 to the present. Sub-topics are generated by the
+models rather than chosen from a list. All figures come from the current pilot
+run.
