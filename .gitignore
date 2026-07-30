@@ -172,3 +172,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# LLM pipeline data & artifacts (kept external)
+*.parquet
+*.npy
+*.jsonl
+/data/
+/artifacts/

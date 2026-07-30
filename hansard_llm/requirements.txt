@@ -1,0 +1,8 @@
+# hansard_llm — LLM topic-extraction pilot dependencies
+openai>=1.0
+python-dotenv>=1.0
+pandas>=2.0
+pyarrow>=14.0
+duckdb>=0.10
+numpy>=1.24
+scikit-learn>=1.3
