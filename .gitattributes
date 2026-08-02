@@ -1,0 +1,4 @@
+# Shell scripts and sbatch templates must stay LF — CRLF breaks bash on the
+# cluster when files are checked out on Windows and copied over.
+*.sh text eol=lf
+*.sbatch text eol=lf
