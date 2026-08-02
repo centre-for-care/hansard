@@ -143,7 +143,35 @@ REASONING_MODELS: tuple[ModelSpec, ...] = (
     ModelSpec("openai/gpt-oss-120b", family="gpt-oss", reasoning=True, max_tokens=2048),
 )
 
-MODELS_BY_ID = {m.model_id: m for m in CORE_MODELS + REASONING_MODELS}
+# --------------------------------------------------------------------------
+# Panel models (cluster vLLM; Workstream C2 — the unified model-sensitivity
+# experiment whose labels double as retrieval gold via leave-one-out)
+# --------------------------------------------------------------------------
+# Core panel: labels all ~10k eval speeches. Nemotron-Super-49B replaces the
+# dated Llama-3.3-70B (single 80GB GPU at FP8, reasoning off); Qwen3-32B dense
+# pairs with 30B-A3B for a dense-vs-MoE contrast at similar scale.
+PANEL_MODELS: tuple[ModelSpec, ...] = (
+    ModelSpec("Qwen/Qwen3-30B-A3B-Instruct-2507", family="qwen"),
+    ModelSpec("google/gemma-3-27b-it", family="google"),
+    ModelSpec("nvidia/Llama-3_3-Nemotron-Super-49B-v1_5", family="nvidia"),
+    ModelSpec("Qwen/Qwen3-32B", family="qwen"),
+)
+
+# Extended size/family axis: runs on a ~2k subsample only.
+EXTENDED_MODELS: tuple[ModelSpec, ...] = (
+    ModelSpec("Qwen/Qwen3-4B-Instruct-2507", family="qwen"),
+    ModelSpec("Qwen/Qwen3-14B", family="qwen"),
+    ModelSpec("mistralai/Mistral-Small-3.2-24B-Instruct-2506", family="mistral"),
+)
+
+# The definitions the panel labels under. Deliberately the two NON-expert
+# retained definitions: retrieval queries using the expert permutations are
+# then automatically non-circular against panel gold, and era_neutral/current
+# queries use leave-one-definition-out (see panel.panel_gold).
+PANEL_DEFINITIONS: tuple[str, ...] = ("era_neutral", "current")
+
+MODELS_BY_ID = {m.model_id: m for m in
+                CORE_MODELS + REASONING_MODELS + PANEL_MODELS + EXTENDED_MODELS}
 
 
 # --------------------------------------------------------------------------

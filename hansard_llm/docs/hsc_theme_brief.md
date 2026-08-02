@@ -107,11 +107,14 @@ per speech. Two results frame everything that follows:
 - On the yes/no presence question the reads agree with each other about 82% of the
   time, which is solid but short of unanimous.
 - The share of speeches counted as being about H&SC ranges from 34% to 81%
-  depending on prompt and model, averaging around 51%. Much of that swing comes
-  from the output format: asking for free-text output puts presence at about 55%,
-  while asking for structured output puts it at about 43%. The headline rate is
-  therefore sensitive to prompt design, which is one reason the substantive checks
-  below matter.
+  depending on prompt and model, averaging around 51%. Part of that swing comes
+  from the output format: free-text output puts presence at about 55% versus 43%
+  for structured output as originally parsed — but 3.1 points of that 12-point
+  gap were an artifact of our parser (which counted a bulleted list as an
+  implicit "yes" when the model never stated one). Among reads where the model
+  itself stated a verdict, the gap is +8.9 points (51.5% vs 42.7%). The headline
+  rate is therefore sensitive to prompt design, which is one reason the
+  substantive checks below matter.
 
 ## 4. What the models found: the topic map
 
@@ -185,7 +188,14 @@ well is one of the domain judgements we are asking for.
 A long tail of smaller topics sits below this list and grows increasingly
 specific: 152 clusters in total, of which
 50 are raised by four or more speeches. Ranks
-41 onward are in the appendix.
+41 onward are in the appendix. (Reproducibility note: this table was produced
+by a since-deleted script with an unrecorded clustering threshold; the same
+arm re-clustered with the now-documented settings — threshold 0.25, clusters
+of at least two phrases — yields 285 clusters over the identical 1,412 phrases
+and 1,673 emissions, with the same leading families. The canonical,
+regenerable table is `docs/taxonomy_clusters.csv` via
+`python -m hansard_llm.docs.build_taxonomy`; cluster counts quoted here should
+be treated as indicative of the threshold, not of the corpus.)
 
 ## 5. Where the sub-topics come from, and why aggregation is delicate
 
@@ -204,13 +214,16 @@ era-neutral rewrite that describes the function rather than the institution: the
 health of the population and the care of people who are sick, injured, disabled,
 elderly or destitute, however that care is provided and paid for. The effect is
 large, and concentrated exactly where the concern predicted. Under the current
-definition the share of speeches judged H&SC climbs from 33% before 1900 to 62%
-after 1948; under the era-neutral wording it runs from 54% to 67%, and the rise
-across the record falls from 29 to 13 percentage points (Figure 2). The two
-definitions agree on 82% of individual reads, and the disagreements run almost
-entirely one way: the era-neutral wording adds speeches, in 23% of pre-1900 reads
-but only 7% of post-1948 ones. On this evidence a good part of the apparent
-growth in health debate after the NHS is an artefact of how we asked the question.
+definition the share of speeches judged H&SC climbs from 38% before 1900 to 64%
+after 1948; under the era-neutral wording it runs from 60% to 69%, and the rise
+across the record falls from 26 to 9 percentage points (Figure 2). (These
+figures correct an earlier version of this brief, which mis-binned the boundary
+years — 1900 was counted as pre-1900 and 1948, the NHS founding year, as
+pre-NHS.) The two definitions agree on 82% of individual reads, and the
+disagreements run almost entirely one way: the era-neutral wording adds
+speeches, in 25% of pre-1900 reads but only 6% of post-1948 ones. On this
+evidence a good part of the apparent growth in health debate after the NHS is
+an artefact of how we asked the question.
 
 ![Share of speeches judged to be about H&SC, by era, under four construct definitions. Neither is known to be correct; the point is that the choice of wording, not the record, sets much of the slope.](fig_definition_era.png)
 
@@ -244,8 +257,8 @@ HC→SC and 46% under SC→HC, against 48% for current and 62% for era-neutral.
 Matched-cell agreement with current is 88% and 87% respectively; speech-level
 majority labels agree with current on 96% and 93% of speeches. The era profile
 tells the same story (Figure 2): both expert orders keep a steep post-1948 rise
-(+24 and +23 percentage points from pre-1900), close to current (+29) and far
-from era-neutral (+13). So replacing the pilot wording with the expert sentences
+(+20 and +19 percentage points from pre-1900), close to current (+26) and far
+from era-neutral (+9). So replacing the pilot wording with the expert sentences
 does not, by itself, undo the NHS-era climb that the earlier definition contrast
 flagged as partly artefactual. The order of the two sentences is a real but
 secondary effect: HC-first is about five points more inclusive than SC-first on
@@ -283,8 +296,11 @@ hitting the cap of five), so the format does not squeeze the count. What it chan
 is the wording and the presence rate. Free-text output produced 5,903 distinct
 phrasings; structured output produced only 3,639, roughly 40% fewer, because
 structured output regularises how the model names the same idea while free text
-lets it drift. Free-text output also raised the presence rate (55% versus 43%) and
-failed to parse cleanly about 5% of the time, which is the source of the noise
+lets it drift. Free-text output also raised the presence rate — +8.9 points among
+reads where the model stated a verdict (51.5% vs 42.7%; the previously reported
+12-point gap included 3.1 points of parser artifact, where a bulleted list was
+counted as an implicit "yes") — and failed to parse cleanly about 5% of the
+time, which is the source of the noise
 described below. So the raw phrase counts in the table, and how badly topics
 fragment, are partly a property of prompt design rather than of the speeches. In
 production we will fix a single output format, and that is itself a measurement
@@ -334,13 +350,13 @@ seeing:
 Taken together, the prevalence numbers depend jointly on the definition, the
 output format, the five-topic cap, and the clustering threshold. We can now put
 rough sizes on the first two: switching from the current wording to era-neutral
-moves the era profile by around 16 percentage points of slope, while swapping in
+moves the era profile by around 17 percentage points of slope, while swapping in
 the expert healthcare-plus-social-care wording leaves that slope largely intact
-(+23 to +24 pp rather than +29) and moves the headline rate by only a few points;
+(+19 to +20 pp rather than +26) and moves the headline rate by only a few points;
 presentation order within the expert wording adds about another 5 points. The
-output format moves the headline rate by about 12 points under every definition
-tested. None of these is settled by the machine, which is precisely why the next
-step is substantive rather than technical.
+output format moves the headline rate by about 9 points (model-stated verdicts)
+under every definition tested. None of these is settled by the machine, which is
+precisely why the next step is substantive rather than technical.
 
 ## 6. What we need next
 
@@ -455,7 +471,9 @@ single number.
 
 D. Extended topic list, ranks 41 onward. This continues the table in Section 4.
 Of the 152 machine-discovered topics under the
-expert HC→SC / JSON arm, 50 are raised by four or more speeches.
+expert HC→SC / JSON arm, 50 are raised by four or more speeches. (See the
+reproducibility note in Section 4: the canonical regenerable table is
+`docs/taxonomy_clusters.csv`.)
 
 | # | Merged topic | Speeches | Phr. |
 |:--|:-----------------------------|:---------|----:|

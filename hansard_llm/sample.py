@@ -228,7 +228,120 @@ def load_sample() -> pd.DataFrame:
     return pd.read_parquet(config.SAMPLE_PATH)
 
 
+# --------------------------------------------------------------------------
+# Evaluation subset (embedder grid + LLM panel; Workstream C0)
+# --------------------------------------------------------------------------
+EVAL_SAMPLE_PATH = config.ARTIFACTS_DIR / "eval10k_sample.parquet"
+EVAL_TARGET_N = 10_000
+EVAL_FLOOR_PER_DECADE = 250
+EVAL_SEED = 20260802
+
+
+def load_eval_sample() -> pd.DataFrame:
+    if not EVAL_SAMPLE_PATH.exists():
+        raise FileNotFoundError(
+            f"No eval subset at {EVAL_SAMPLE_PATH}. Run "
+            f"`python -m hansard_llm.sample --eval-subset` first.")
+    return pd.read_parquet(EVAL_SAMPLE_PATH)
+
+
+def build_eval_subset(
+    *,
+    target_n: int = EVAL_TARGET_N,
+    floor_per_decade: int = EVAL_FLOOR_PER_DECADE,
+    seed: int = EVAL_SEED,
+    write: bool = True,
+) -> pd.DataFrame:
+    """Decade-stratified evaluation subset, drawn WITHOUT the seed regex.
+
+    Unlike the pilot (which over-samples seed-positives 2:1 and equalises
+    eras), this is a random draw within each decade of an unenriched pool, so
+    threshold/retention estimates transfer to the real corpus. Allocation is
+    proportional to decade size with a floor (early decades are small; the
+    floor keeps their per-decade recall estimates usable), take-all where a
+    decade has fewer than the floor. ``sampling_weight`` = decade population /
+    decade draw, for corpus-level rates.
+    """
+    con = _connect()
+    # Same content hygiene as the pilot, minus any seed-regex involvement.
+    chambers = ", ".join("'" + c + "'" for c in ("Commons", "Lords"))
+    tiers = ", ".join("'" + t + "'" for t in LENGTH_TIERS)
+    con.execute(
+        f"""
+        CREATE TEMP TABLE eval_meta AS
+        SELECT speech_id, (year // 10) * 10 AS decade_bin
+        FROM enriched
+        WHERE speech_text IS NOT NULL
+          AND NOT procedural
+          AND word_count >= {MIN_WORDS}
+          AND speech_type IN ({tiers})
+          AND chamber IN ({chambers})
+          AND year IS NOT NULL
+        """
+    )
+    pop = con.execute(
+        "SELECT decade_bin, COUNT(*) AS pop FROM eval_meta GROUP BY 1 ORDER BY 1"
+    ).df()
+    total_pop = int(pop["pop"].sum())
+
+    frames = []
+    for r in pop.itertuples():
+        proportional = round(target_n * r.pop / total_pop)
+        n = min(int(r.pop), max(floor_per_decade, proportional))
+        ids = con.execute(
+            f"""
+            SELECT * FROM (
+                SELECT speech_id, decade_bin FROM eval_meta
+                WHERE decade_bin = {int(r.decade_bin)}
+            ) USING SAMPLE reservoir({n} ROWS) REPEATABLE ({seed})
+            """
+        ).df()
+        ids["decade_pop"] = int(r.pop)
+        frames.append(ids)
+    picked = pd.concat(frames, ignore_index=True).drop_duplicates("speech_id")
+
+    con.register("picked_ids", picked[["speech_id"]])
+    df = con.execute(
+        """
+        SELECT e.speech_id, e.year, e.decade, e.chamber, e.speech_type,
+               e.word_count, e.section_title, e.speech_text
+        FROM enriched e
+        JOIN picked_ids p USING (speech_id)
+        """
+    ).df()
+    con.close()
+    df = (df.drop_duplicates(subset="speech_id")
+          .merge(picked, on="speech_id", how="left")
+          .reset_index(drop=True))
+    decade_n = df.groupby("decade_bin")["speech_id"].transform("count")
+    df["sampling_weight"] = df["decade_pop"] / decade_n
+
+    if write:
+        config.ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(EVAL_SAMPLE_PATH, index=False)
+        _write_sample_manifest(EVAL_SAMPLE_PATH,
+                               SampleDesign(seed=seed), config.DEFAULT_TOPIC,
+                               len(df))
+    return df
+
+
 if __name__ == "__main__":
-    d = draw_sample()
-    print(f"Sampled {len(d)} speeches -> {config.SAMPLE_PATH}")
-    print(describe(d).to_string(index=False))
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Draw samples.")
+    ap.add_argument("--eval-subset", action="store_true",
+                    help="draw the decade-stratified ~10k evaluation subset "
+                         "(no seed regex) instead of the pilot sample")
+    args = ap.parse_args()
+
+    if args.eval_subset:
+        d = build_eval_subset()
+        print(f"Sampled {len(d)} speeches -> {EVAL_SAMPLE_PATH}")
+        print(d.groupby("decade_bin")
+              .agg(n=("speech_id", "count"), pop=("decade_pop", "first"),
+                   weight=("sampling_weight", "first"))
+              .to_string())
+    else:
+        d = draw_sample()
+        print(f"Sampled {len(d)} speeches -> {config.SAMPLE_PATH}")
+        print(describe(d).to_string(index=False))

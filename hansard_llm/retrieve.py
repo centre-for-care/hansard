@@ -47,6 +47,8 @@ SPOTCHECK_IDS_PATH = config.ARTIFACTS_DIR / "retrieval_spotcheck_ids.json"
 _WHOLE_VECS = config.ARTIFACTS_DIR / "speech_embeddings_whole.npy"
 _WHOLE_KEYS = config.ARTIFACTS_DIR / "speech_embeddings_whole_keys.json"
 _CHUNK_DIR = config.ARTIFACTS_DIR / "speech_chunk_embeddings"
+_CHUNK_CONSOLIDATED = config.ARTIFACTS_DIR / "chunk_embeddings.npy"
+_CHUNK_INDEX = config.ARTIFACTS_DIR / "chunk_index.parquet"
 _QUERY_VECS = config.ARTIFACTS_DIR / "retrieval_query_embeddings.npy"
 _QUERY_KEYS = config.ARTIFACTS_DIR / "retrieval_query_keys.json"
 
@@ -193,12 +195,26 @@ class SpeechEmbeddingCache:
 
 
 class ChunkEmbeddingCache:
-    """Per-speech chunk matrices on disk under ``speech_chunk_embeddings/``."""
+    """Chunk matrices: consolidated single-file store + per-speech overflow.
+
+    The original layout (one tiny .npy per speech, 3,270 files) was
+    filesystem-hostile. Reads now hit ``chunk_embeddings.npy`` (memory-mapped)
+    via ``chunk_index.parquet``; anything embedded after the last
+    consolidation still lands in per-speech files under
+    ``speech_chunk_embeddings/`` and is folded in by
+    ``scripts/consolidate_chunks.py``.
+    """
 
     def __init__(self) -> None:
         _CHUNK_DIR.mkdir(parents=True, exist_ok=True)
         self._client: OpenAI | None = None
         self._mem: dict[str, np.ndarray] = {}
+        self._consolidated: np.ndarray | None = None
+        self._spans: dict[str, tuple[int, int]] = {}
+        if _CHUNK_CONSOLIDATED.exists() and _CHUNK_INDEX.exists():
+            self._consolidated = np.load(_CHUNK_CONSOLIDATED, mmap_mode="r")
+            idx = pd.read_parquet(_CHUNK_INDEX)
+            self._spans = {r.key: (r.start, r.end) for r in idx.itertuples()}
 
     @staticmethod
     def key(speech_id, text: str) -> str:
@@ -213,6 +229,11 @@ class ChunkEmbeddingCache:
         k = self.key(speech_id, text)
         if k in self._mem:
             return self._mem[k]
+        span = self._spans.get(k)
+        if span is not None:
+            arr = np.asarray(self._consolidated[span[0]: span[1]])
+            self._mem[k] = arr
+            return arr
         p = self._path(k)
         if p.exists():
             arr = np.load(p)

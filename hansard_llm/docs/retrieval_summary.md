@@ -84,16 +84,7 @@ JSON / uncapped / role=none.
 | name_only | whole | False | 2819 | 0.298 | 0.292 | 0.356 |
 | name_only | whole | True | 181 | 0.378 | 0.377 | 0.445 |
 
-## LLM spot-check on filter pool (expert HC→SC / JSON)
-
-| Band | N labeled | Mean retrieval score | LLM positive rate |
-|---|---:|---:|---:|
-| bottom | 50 | 0.154 | 0.0 |
-| random_mid | 50 | 0.248 | 0.12 |
-| top | 50 | 0.433 | 0.94 |
-
 ## Provisional takeaway
 
 Best ranking on the labeled pilot: **expert_hc_only** / **whole** (AP=0.878, AUROC=0.872). Keyword baseline AP=0.6669 (precision=0.6778, recall=0.9457).
 For the shipping query **expert_hc_sc / whole**, a cosine threshold of **0.25** reaches ≥90% recall of LLM-positives on the pilot while retaining **76.7%** of speeches (precision ≈ 59.9%). Pilot is keyword-stratified, so retained fractions will be lower on a natural corpus.
-On the era-stratified filter pool spot-check (150 speeches, expert HC→SC / JSON), LLM-positive rates were **0.94** (top-50 by score), **0.12** (random mid), **0.0** (bottom-50) — strong enrichment at the top of the ranking outside the keyword-stratified pilot.
