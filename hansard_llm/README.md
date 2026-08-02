@@ -22,23 +22,38 @@ The grid is the cartesian product of nuisance factors we want invariance to:
 | `role` | none / domain-expert | `prompts.ROLE_LEVELS` |
 | `task` | two paraphrases | `prompts.TASK_LEVELS` |
 | `output_format` | json / free (no format instruction) | `prompts.FORMAT_LEVELS` |
-| `model` | Qwen3-235B / Llama-3.3-70B / GLM-5.2 | `config.CORE_MODELS` |
+| `model` | Qwen3-30B-A3B / gemma-3-27b / Llama-3.3-70B / Qwen3-235B (reference) | `config.CORE_MODELS` |
 | `condition` | temp 0 (1 rep) / temp 0.7 (N reps) | `run.CORE`, `run.SELFCONSISTENCY` |
 
-8 prompt variants × 3 models = 24 cells per speech at temp 0. The temp-0.7
-condition is the **self-consistency baseline** (models are byte-deterministic
-at temp 0, so run-to-run variance only appears with temperature).
+8 prompt variants × 4 models = 32 cells per speech at temp 0. The temp-0.7
+condition is the **self-consistency baseline**. (Temp-0 byte-determinism is an
+*assumption, not a guarantee* for hosted MoE serving with dynamic batching —
+the model-grid plan includes a repeat-at-temp-0 check to measure it.)
 
 ## Pipeline
 
 ```
 sample.draw_sample()    # stratified pilot sample (era × length × seed-presence)
-run.execute(plan)       # grid → append-only JSONL (idempotent, resumable)
-run.load_results()      # JSONL → DataFrame, reparsed from raw_text
+                        # + per-cell sampling weights for corpus-level rates
+run.execute(plan, experiment="...")   # grid → runs/<experiment>/<run_id>/
+                        # results.jsonl + manifest.json (idempotent, resumable)
+run.load_experiment("...")            # versioned store → DataFrame (reparsed)
+run.load_legacy()       # frozen pre-provenance pilot log, pool-annotated
 metrics.summarize(df)   # presence α, factor decomposition, prevalence spread,
                         # semantic theme agreement
 metrics.discover_taxonomy(df)   # cluster emitted themes → "what's there"
 ```
+
+### Results store
+
+New runs write under `artifacts/llm/runs/<experiment>/<run_id>/` — one
+append-only `results.jsonl` plus a `manifest.json` recording the git SHA, the
+full prompt text per `prompt_hash`, models, conditions, and pool. Rows carry
+`experiment / run_id / pool / code_version / backend`. The pre-provenance
+single log is frozen at `artifacts/llm/legacy/` and is read through
+`run.load_legacy()`, which reconstructs the `pool` column (the legacy log mixed
+pilot and retrieval spot-check rows under identical labels — pilot analyses
+must filter `pool == "pilot"`).
 
 ### Quick start
 
@@ -86,9 +101,11 @@ metrics.summarize(df)
 ## Tunables / open items
 
 - `metrics.DEFAULT_TAU` (0.72) — same-theme cosine threshold. Qwen embeddings
-  have a high baseline (~0.47 even for unrelated phrases); the taxonomy
-  `distance_threshold` likely wants ~0.22–0.25, not 0.35. Calibrate once on the
-  full run.
+  have a high baseline (~0.47 even for unrelated phrases); the reproducible
+  taxonomy (`docs/build_taxonomy.py`) uses `distance_threshold=0.25` and
+  records it in a sidecar manifest. Note: at 0.25 the pilot arm yields 285
+  clusters, not the 152 in the original brief — that number came from a
+  since-deleted script with unrecorded settings and should not be cited.
 - Reasoning models (`config.REASONING_MODELS`: Kimi-K2.6, gpt-oss-120b) are a
   deferred separate axis — they emit a reasoning trace and need a larger token
   budget; mixing them into the core grid would confound reasoning with family.

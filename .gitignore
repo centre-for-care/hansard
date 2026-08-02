@@ -179,3 +179,11 @@ cython_debug/
 *.jsonl
 /data/
 /artifacts/
+
+# Regenerable multi-MB HTML reports (build scripts live next to them);
+# small PNGs and the brief (md/pdf) remain tracked as cited deliverables.
+hansard_llm/docs/*.html
+
+# Cluster job logs
+cluster/logs/
+logs/

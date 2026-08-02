@@ -41,12 +41,14 @@ def _cell(row) -> dict:
 
 
 def build_data() -> list[dict]:
-    df = run.load_results()
+    df = run.load_legacy()
     # The definition filter matters: the definition-sensitivity arm also runs at
     # role=none / v1_nocap / both formats, so without it those cells would be
     # pooled into the uncapped side and the anchor effect would be measured
-    # against a mixture of definitions.
-    df = df[(df["condition"] == "temp0") & (df["role"] == "none")
+    # against a mixture of definitions. pool == "pilot" likewise excludes the
+    # retrieval spot-check rows logged under the same labels.
+    df = df[(df["pool"] == "pilot")
+            & (df["condition"] == "temp0") & (df["role"] == "none")
             & (df["task"].isin(["v1", "v1_nocap"]))
             & (df["definition"] == "current")
             & (df["output_format"].isin(FORMATS))].copy()

@@ -126,6 +126,18 @@ def draw_sample(
     con = _connect()
     _build_meta_table(con, design, topic)
 
+    # Population size of every stratum cell, for sampling weights: the draw is
+    # deliberately non-proportional (seed-positives are over-sampled ~10x, eras
+    # equalised), so any corpus-level rate computed from the sample MUST weight
+    # rows by cell_pop / cell_n or the estimate inherits the design, not the
+    # corpus.
+    cell_pop = con.execute(
+        """
+        SELECT era, speech_type, seed_present, COUNT(*) AS cell_pop
+        FROM meta GROUP BY era, speech_type, seed_present
+        """
+    ).df()
+
     id_frames: list[pd.DataFrame] = []
     for label, _lo, _hi in ERA_BUCKETS:
         for tier in LENGTH_TIERS:
@@ -160,10 +172,40 @@ def draw_sample(
     con.close()
 
     df = df.drop_duplicates(subset="speech_id").reset_index(drop=True)
+
+    # Attach weights: cell population over realised cell sample size.
+    cell_n = (df.groupby(["era", "speech_type", "seed_present"], dropna=False)
+              .size().rename("cell_n").reset_index())
+    df = (df.merge(cell_pop, on=["era", "speech_type", "seed_present"], how="left")
+          .merge(cell_n, on=["era", "speech_type", "seed_present"], how="left"))
+    df["sampling_weight"] = df["cell_pop"] / df["cell_n"]
+
     if write:
         config.ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
         df.to_parquet(config.SAMPLE_PATH, index=False)
+        _write_sample_manifest(config.SAMPLE_PATH, design, topic, len(df))
     return df
+
+
+def _write_sample_manifest(path, design: SampleDesign, topic: Topic,
+                           n_rows: int) -> None:
+    """Sidecar manifest: reservoir REPEATABLE draws are only reproducible on
+    the same DuckDB version, so record it (plus seed and design) next to the
+    parquet."""
+    import duckdb as _duckdb
+    from . import provenance
+    provenance.write_manifest(path.parent, {
+        "artifact": path.name,
+        "n_rows": n_rows,
+        "design": {"per_cell_present": design.per_cell_present,
+                   "per_cell_absent": design.per_cell_absent,
+                   "min_words": design.min_words,
+                   "chambers": list(design.chambers),
+                   "seed": design.seed},
+        "topic": topic.name,
+        "definition_id": topic.definition_id,
+        "duckdb_version": _duckdb.__version__,
+    }, filename=f"{path.stem}.manifest.json")
 
 
 def describe(df: pd.DataFrame) -> pd.DataFrame:

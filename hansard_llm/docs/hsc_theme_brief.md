@@ -115,8 +115,11 @@ per speech. Two results frame everything that follows:
 
 ## 4. What the models found: the topic map
 
-Across the 270 speeches the models emitted 8,692 distinct sub-topic phrases.
-Grouped by meaning, the most common topics are shown below. Both modern NHS-era
+The topic map below is built from the configuration we now expect to ship: the
+expert healthcare-then-social-care definition, under structured (JSON) output, no
+role framing, and no five-topic cap. Across the 270 speeches that arm produced
+1,412 distinct sub-topic phrases (1,673 emissions). Grouped by meaning, the most
+common topics are shown below. Both modern NHS-era
 themes and nineteenth-century themes such as Poor Law, sanitation and housing
 appear. This coverage should be read with the sampling in mind: the keyword net
 was deliberately built to include both modern and historical H&SC vocabulary, so
@@ -125,7 +128,7 @@ than independent evidence about the balance of the corpus. What the map does sho
 is what the models surface as sub-topics once a speech is placed in front of them,
 and that is what the rest of this note examines.
 
-![Most common H&SC topics across the 270-speech pilot (share of speeches raising each; count in brackets). Labels are the clusters' automatically chosen medoid phrases, not hand-edited.](fig_top_topics.png)
+![Most common H&SC topics under the expert HC→SC definition with structured output (share of speeches raising each; count in brackets). Labels are the clusters' automatically chosen medoid phrases, not hand-edited.](fig_top_topics.png)
 
 Each row below is a machine-discovered topic, that is, a cluster of same-meaning
 phrases, ranked by how many of the 270 speeches raise it. The "Phr." column counts
@@ -133,54 +136,56 @@ how many distinct wordings the models used for that one idea. The label in each 
 is the cluster's medoid: the single emitted phrase closest to the cluster's centre
 in meaning-space, chosen automatically rather than written by us. Nothing here is
 hand-edited, which is why some labels read awkwardly or are oddly cased (for
-example "Mental Health Impact" or "local governance in health"). Naming the topics
+example "support for elderly people" or "housing conditions"). Naming the topics
 well is one of the domain judgements we are asking for.
 
 | # | Merged topic | Speeches | Phr. | Example sub-themes the models wrote |
 |:--|:----------------------|:---------|----:|:----------------------------------------------|
-| 1 | Public health | 83 (31%) | 99 | Public health policy; Public health infrastructure; Public health response |
-| 2 | NHS funding and finance | 77 (28%) | 365 | NHS funding; NHS; National Health Service |
-| 3 | Adult social care | 37 (14%) | 39 | Adult social care provision; Adult social care governance; Adult social care regulation |
-| 4 | Poor Law and workhouses | 34 (13%) | 187 | Poor Law administration; Poor Law; Workhouse conditions |
-| 5 | Care homes | 32 (12%) | 38 | Institutional care; Institutional care conditions; Care homes for old people |
-| 6 | Social welfare | 27 (10%) | 33 | Social welfare provision; Social welfare policy; Social welfare funding |
-| 7 | Government accountability in health | 24 (9%) | 61 | Public health governance; Government accountability in health policy; Government transparency in health |
-| 8 | Healthcare funding | 23 (8%) | 31 | healthcare financing; Health service funding; Hospital Funding |
-| 9 | Access to healthcare | 20 (7%) | 38 | Access to care; Healthcare access; Access to treatment |
-| 10 | Mental Health Impact | 18 (7%) | 15 | Mental health; Mental health impacts; Mental health effects |
-| 11 | Public health and wellbeing | 17 (6%) | 8 | Public or mental health; Public or mental health policy; Public health (mental wellbeing) |
-| 12 | public health funding | 15 (6%) | 30 | Public health financing; Public health finance; Public health funding and expenditure |
-| 13 | Social care infrastructure | 15 (6%) | 16 | Social care provision; Social care policy; Social care provisions |
-| 14 | NHS accountability and transparency | 15 (6%) | 41 | Health service accountability; NHS accountability; NHS accountability and governance |
-| 15 | Poverty and relief | 14 (5%) | 20 | Poverty relief; Poverty relief management; Poverty and destitution |
-| 16 | Social care funding | 14 (5%) | 49 | Adult social care funding; Public funding of care; Funding for social care services |
-| 17 | Housing and health | 14 (5%) | 47 | Housing conditions affecting health; Housing and public health; Public health and housing conditions |
-| 18 | local governance in health | 13 (5%) | 48 | local health governance; local health planning; Local governance of health |
-| 19 | Health workforce | 13 (5%) | 25 | Healthcare workforce; Health workforce planning; Medical workforce planning |
-| 20 | Mental health services and community care | 13 (5%) | 40 | Mental health services; Mental health support; Mental health provision |
-| 21 | Affordable housing | 12 (4%) | 29 | Housing; Housing for the working classes; Housing for the poor |
-| 22 | Public funding allocation | 12 (4%) | 21 | Government funding; Public funding; Public Expenditure |
-| 23 | Sanitary conditions | 12 (4%) | 31 | public health and sanitation; Sanitation and hygiene; Sanitation and disease prevention |
-| 24 | Local authority powers | 12 (4%) | 22 | Local authority responsibility; Local authority role; Local authority duties |
-| 25 | Care home regulation | 11 (4%) | 29 | Social care regulation; Care home regulation and administration; Care homes regulation |
-| 26 | NHS employment | 11 (4%) | 68 | NHS workforce; NHS recruitment; NHS workforce planning |
-| 27 | Health legislation | 11 (4%) | 10 | Public health legislation; Healthcare legislation; Health service legislation |
-| 28 | Infectious disease control | 11 (4%) | 20 | Infectious disease; Infection control; Infectious disease prevention |
-| 29 | Healthcare administration | 11 (4%) | 11 | Health administration; Health service administration; Healthcare management |
-| 30 | Healthcare access inequality | 10 (4%) | 31 | Healthcare inequality; Health inequalities; Inequality in healthcare access |
-| 31 | Local administration and governance of care | 10 (4%) | 16 | Governance of care institutions; Governance of social care services; Social care governance |
-| 32 | Housing conditions | 10 (4%) | 19 | Living conditions; Housing and living conditions; Housing standards |
-| 33 | Healthcare resource allocation | 10 (4%) | 19 | resource allocation in health; Resource allocation for healthcare; Health Resource Allocation |
-| 34 | Health policy | 10 (4%) | 11 | Healthcare policy; health policy consultation; Health policy measures |
-| 35 | Government accountability | 10 (4%) | 7 | Government Responsibility; Political accountability; Democratic accountability |
-| 36 | Public health campaigns | 9 (3%) | 16 | public health initiatives; Public health awareness campaigns; Public health communication |
-| 37 | NHS response to infection | 9 (3%) | 19 | NHS response; NHS response to outbreaks; NHS response to pandemic threat |
-| 38 | Public health and prevention | 9 (3%) | 25 | Public health prevention; Preventative healthcare; preventive healthcare |
-| 39 | Health care charges | 9 (3%) | 30 | Healthcare charges; Healthcare costs; Health service costs |
-| 40 | Disease control | 9 (3%) | 8 | Disease prevention; Disease control measures |
+| 1 | NHS funding and planning | 51 (19%) | 112 | NHS funding/performance; NHS resource management; NHS funding |
+| 2 | Poor relief and pauperism | 32 (12%) | 79 | Poor Law relief; Poor law/pauperism; Poverty and the Poor Law |
+| 3 | Public health | 31 (11%) | 41 | Public Health Policy; Public Health Measures; Public health infrastructure |
+| 4 | Social welfare provision | 23 (9%) | 33 | Social welfare support; Social services funding; Social welfare governance |
+| 5 | Health service funding | 19 (7%) | 29 | Healthcare funding; public health funding; public financing of health services |
+| 6 | Access to healthcare | 19 (7%) | 27 | Access to healthcare services; Care and treatment access; Healthcare access |
+| 7 | Carer recognition and support | 18 (7%) | 46 | Social care funding; Care for carers; Public funding for care |
+| 8 | support for elderly people | 13 (5%) | 37 | Care for pensioners; Old age support; Elderly care |
+| 9 | housing conditions | 12 (4%) | 30 | Social housing; Public health housing; Housing standards |
+| 10 | Mental health services | 12 (4%) | 29 | Hospital provision for mental health; Mental health provision; mental health facilities |
+| 11 | Hospital governance | 11 (4%) | 24 | Hospital management and administration; Hospital administration and efficiency; hospital management |
+| 12 | Public involvement in healthcare decision-making | 11 (4%) | 26 | Decentralisation of healthcare decisions; Public involvement in healthcare; Patient involvement in healthcare |
+| 13 | Disease prevention | 11 (4%) | 12 | preventive healthcare; Preventative healthcare; Preventive Care |
+| 14 | Overcrowding and living conditions | 10 (4%) | 15 | Overcrowded housing; Barrack conditions; Poor living conditions |
+| 15 | Sanitation | 10 (4%) | 19 | Sanitary conditions; Sanitary conditions in public buildings; Sewage and sanitation |
+| 16 | Disease outbreak control | 10 (4%) | 24 | Epidemic control; Epidemic response; Infectious disease response |
+| 17 | Hospital discharge planning | 10 (4%) | 17 | hospital care; Hospital discharge; Hospital preservation |
+| 18 | transparency in public health inquiries | 9 (3%) | 14 | Transparency of public health bodies; Public trust in healthcare delivery; transparency in health decision-making |
+| 19 | Nursing workforce shortages | 8 (3%) | 19 | Workforce crisis in healthcare; Workforce crisis in health; Nursing workforce |
+| 20 | Healthcare regulatory agency oversight | 8 (3%) | 14 | Healthcare agencies; Health commission; Department of Health oversight |
+| 21 | Children's residential care | 8 (3%) | 19 | Children in care; child protection services; protection of young children in care settings |
+| 22 | vaccination | 8 (3%) | 22 | vaccination and immunisation; immunisation; vaccination policy |
+| 23 | Healthcare charges | 7 (3%) | 19 | Private fees for medical practitioners in pay beds; Patient charges/costs; Pay beds and private fees in public hospitals |
+| 24 | Support for victims | 7 (3%) | 8 | Support for the vulnerable; support for recovery; Support for vulnerable immigrants |
+| 25 | Integration of health and social care services | 6 (2%) | 20 | Patient-centred services; Integrated care; Patient-centred care services |
+| 26 | Food poverty | 6 (2%) | 7 | Food costs and access; Food supply shortages; Food poverty and food bank support |
+| 27 | Social worker training and support | 6 (2%) | 13 | Care worker training; Social worker training; Health professional training and support |
+| 28 | tuberculosis treatment | 6 (2%) | 13 | TB care and treatment; Tuberculosis control; TB treatment |
+| 29 | Medical aid provision | 6 (2%) | 10 | Medical aid; Healthcare supply chain; Medical Relief |
+| 30 | Independence of the medical profession | 6 (2%) | 16 | Doctor compensation and retirement; Medical profession independence; Doctor recruitment to under-doctored areas |
+| 31 | Well-being as a guiding principle | 6 (2%) | 7 | Well-being as guiding principle; Mental and physical well-being in care; Physical well-being and basic living standards |
+| 32 | Government funding allocation | 6 (2%) | 6 | Public funding allocation; Funding and expenditure oversight; funding and budget allocation |
+| 33 | Parliamentary scrutiny of care regulations | 5 (2%) | 7 | Reform of healthcare and social care regulatory bodies; parliamentary scrutiny of health regulations; Timing of health and social care legislation |
+| 34 | Learning disability nursing | 5 (2%) | 15 | nursing care; Learning disability nursing shortages; Mental health nursing |
+| 35 | Health and working conditions | 5 (2%) | 11 | Health of working life; Workplace health risks; health impacts of poor working conditions |
+| 36 | Mental capacity legislation | 5 (2%) | 11 | Mental health and capacity law; Mental Capacity; Mental capacity and decision-making |
+| 37 | Health visitor roles | 5 (2%) | 9 | Health visitor role; Health visitor public health role; Service personnel healthcare access |
+| 38 | disease diagnosis | 5 (2%) | 8 | disease detection and diagnosis; Diagnosis of illness; health diagnostics |
+| 39 | Taxation on low-income households | 5 (2%) | 8 | Taxation and its impact on low-income groups; Local taxation for relief; Local fiscal burden and taxation |
+| 40 | Access to social support | 5 (2%) | 4 | Social integration; Social needs prioritization; Social clubs |
 
-A long tail of some 700 smaller topics sits below this list and grows
-increasingly specific. It is available on request.
+A long tail of smaller topics sits below this list and grows increasingly
+specific: 152 clusters in total, of which
+50 are raised by four or more speeches. Ranks
+41 onward are in the appendix.
 
 ## 5. Where the sub-topics come from, and why aggregation is delicate
 
@@ -188,9 +193,10 @@ The topic map is not a neutral readout of what Parliament said. It is shaped at
 several points by choices we made, each of which the pilot suggests we should
 revisit with domain input.
 
-**The definition sets the era profile.** Everything else in this note is measured
-against one definition of H&SC, the one quoted in Section 2, which names the NHS,
-adult social care and care homes. Those are institutions that did not exist for
+**The definition sets the era profile.** The presence and era findings below
+compare several construct wordings; the topic map in Section 4 uses the expert
+healthcare-then-social-care wording we expect to ship. The original pilot
+definition, quoted in Section 2, names the NHS, adult social care and care homes. Those are institutions that did not exist for
 the first century and a half of the record, so the wording risks reading the
 nineteenth century as quiet about health simply because it lacked the vocabulary.
 We tested this by re-running the same speeches, models and formats against an
@@ -251,6 +257,25 @@ of the current pilot definition. The contested speeches under each pair —
 expert-order flips, and current versus either expert arm — can be inspected in
 `definition_review.html`, which now lets the reader switch comparison presets.
 
+**The expert definition changes who is counted more than what is named.**
+Sub-topics were collected on every positive read of the definition arm, so the
+maps can be compared directly. Holding format fixed at structured output (the
+cleaner stream, and the one we intend to ship), the expert HC→SC map and the
+current-definition map agree on twenty of the top twenty-five topics by meaning
+(embedding match), and the ranks of those matched topics correlate at Spearman
+0.83. The headline families stay put: NHS funding, public health, Poor Law /
+pauper relief, social welfare, access to care, mental health, housing and
+sanitation. What moves is emphasis at the margin. Under the expert wording,
+carers and elderly support rise into the top ten, and disease prevention,
+overcrowding and healthcare-regulator oversight enter the top twenty-five; under
+the current wording, local governance of health services and health
+infrastructure sit higher. Absolute speech counts are a little lower than in the
+earlier full-grid map because this comparison uses one definition × one format
+rather than eight prompt wordings, but the shape of the taxonomy is stable enough
+that swapping the shipping definition does not force a fresh substantive review
+of the topic list from scratch — only a check on the handful of families that
+shift rank.
+
 **The prompt's output format changes the result.** Each read was asked either for
 free-text output or for structured output, and this matters more than expected.
 The number of sub-topics per speech is unaffected (about 3.8 either way, often
@@ -288,12 +313,14 @@ and clustering the ones that sit close together, with each cluster labelled by i
 most central phrase (its medoid). A single setting controls how readily phrases merge. Set it
 loose and unrelated ideas get lumped together; set it tight and one idea fragments
 into several topics. We currently keep it tight to avoid false merges, and the
-cost of that is visible in the table: Public health (row 1) sits apart from Public
-health and wellbeing (11), public health funding (12), Public health campaigns
-(36) and Public health and prevention (38), and the same fragmentation runs
-through the funding rows (2, 8, 12, 16, 22) and the governance rows (7, 14, 24, 31,
-35). Where these should be merged, and how broad the final families should be, is a
-domain judgement rather than a distance measurement.
+cost of that is visible in the table: NHS funding and planning (row 1) sits apart
+from Health service funding (5) and Carer recognition and support / social care
+funding (7); Public health (3) sits apart from Disease prevention (13) and
+Disease outbreak control (16); and Hospital governance (11), transparency in
+public health inquiries (18) and Healthcare regulatory agency oversight (20)
+split what could be one governance family. Where these should be merged, and how
+broad the final families should be, is a domain judgement rather than a distance
+measurement.
 
 **A small share of entries are formatting noise, not content.** From the free-text
 parse failures above, a model's answer sometimes leaked into the topic field.
@@ -426,104 +453,107 @@ nutrition), are still available in config but have not been run; they would brac
 the construct so the headline prevalence can be reported as a range rather than a
 single number.
 
-D. Extended topic list, ranks 41 to 100. This continues the table in Section 4. Of
-the roughly 700 machine-discovered topics, 141 are raised by four or more speeches.
+D. Extended topic list, ranks 41 onward. This continues the table in Section 4.
+Of the 152 machine-discovered topics under the
+expert HC→SC / JSON arm, 50 are raised by four or more speeches.
 
 | # | Merged topic | Speeches | Phr. |
 |:--|:-----------------------------|:---------|----:|
-| 41 | Funding | 8 (3%) | 8 |
-| 42 | Sewage and sanitation | 8 (3%) | 31 |
-| 43 | Public trust in the NHS | 8 (3%) | 13 |
-| 44 | Carer support and well-being | 8 (3%) | 40 |
-| 45 | Protection of vulnerable populations | 8 (3%) | 8 |
-| 46 | Regulatory oversight | 8 (3%) | 13 |
-| 47 | Children's homes and residential care | 8 (3%) | 45 |
-| 48 | Ministerial oversight in health | 7 (3%) | 25 |
-| 49 | Health Service | 7 (3%) | 9 |
-| 50 | Integration of health and social care | 7 (3%) | 31 |
-| 51 | Health and social care policy coordination | 7 (3%) | 10 |
-| 52 | Immunisation policy | 7 (3%) | 37 |
-| 53 | Healthcare Regulation | 7 (3%) | 19 |
-| 54 | Public financial accountability | 7 (3%) | 8 |
-| 55 | Patient safety in healthcare | 7 (3%) | 18 |
-| 56 | Social care and housing for vulnerable groups | 7 (3%) | 8 |
-| 57 | Workhouse medical care | 7 (3%) | 18 |
-| 58 | Healthcare reform | 7 (3%) | 11 |
-| 59 | Hospital design | 6 (2%) | 22 |
-| 60 | Tuberculosis treatment and control | 6 (2%) | 41 |
-| 61 | Government oversight in health | 6 (2%) | 10 |
-| 62 | Local Authority Care | 6 (2%) | 11 |
-| 63 | Impact of economic policy on health care | 6 (2%) | 15 |
-| 64 | NHS estate | 6 (2%) | 50 |
-| 65 | Post-war social needs | 6 (2%) | 23 |
-| 66 | Old age pensions | 6 (2%) | 30 |
-| 67 | Government oversight | 6 (2%) | 6 |
-| 68 | Parliamentary Scrutiny | 6 (2%) | 8 |
-| 69 | Public participation in healthcare decision-making | 6 (2%) | 32 |
-| 70 | Public relief systems | 6 (2%) | 6 |
-| 71 | Healthcare professional support | 6 (2%) | 11 |
-| 72 | government healthcare planning | 6 (2%) | 12 |
-| 73 | Public health administration | 6 (2%) | 5 |
-| 74 | Global public health | 6 (2%) | 14 |
-| 75 | Hospital care | 6 (2%) | 5 |
-| 76 | Social security funding | 5 (2%) | 15 |
-| 77 | Social services management | 5 (2%) | 22 |
-| 78 | medical care for the poor | 5 (2%) | 21 |
-| 79 | Patient care | 5 (2%) | 7 |
-| 80 | Community wellbeing | 5 (2%) | 5 |
-| 81 | Social care legislation and reform | 5 (2%) | 14 |
-| 82 | Health care prioritisation | 5 (2%) | 15 |
-| 83 | Historical health policy | 5 (2%) | 13 |
-| 84 | Free healthcare at the point of use | 5 (2%) | 12 |
-| 85 | NHS information provision | 5 (2%) | 26 |
-| 86 | Parliamentary timing of health legislation | 5 (2%) | 16 |
-| 87 | Poverty and health | 5 (2%) | 6 |
-| 88 | Public health and food poverty | 5 (2%) | 10 |
-| 89 | Public health response to epidemic | 5 (2%) | 29 |
-| 90 | Armed forces healthcare | 5 (2%) | 7 |
-| 91 | Support for vulnerable individuals | 5 (2%) | 4 |
-| 92 | Local authority health responsibilities | 5 (2%) | 12 |
-| 93 | NHS Commissioning | 5 (2%) | 20 |
-| 94 | Overcrowding and housing | 5 (2%) | 16 |
-| 95 | Decision-making processes in care and legal proceedings | 5 (2%) | 7 |
-| 96 | Local authority housing provision | 5 (2%) | 14 |
-| 97 | public health policy implementation | 5 (2%) | 6 |
-| 98 | Local taxation | 5 (2%) | 6 |
-| 99 | Older people's care | 5 (2%) | 30 |
-| 100 | Disease outbreaks | 5 (2%) | 6 |
+| 41 | public health guidance | 5 (2%) | 7 |
+| 42 | Healthcare policy | 4 (1%) | 4 |
+| 43 | impact of environmental hazards on health | 4 (1%) | 8 |
+| 44 | Patient safety | 4 (1%) | 5 |
+| 45 | NHS medical job opportunities | 4 (1%) | 9 |
+| 46 | hospital infrastructure development | 4 (1%) | 16 |
+| 47 | Medical education funding | 4 (1%) | 7 |
+| 48 | Medication compliance | 4 (1%) | 13 |
+| 49 | Basic salary for doctors | 4 (1%) | 10 |
+| 50 | Professional accountability in healthcare | 4 (1%) | 8 |
+| 51 | Nurse regulation | 3 (1%) | 13 |
+| 52 | Disability provision | 3 (1%) | 7 |
+| 53 | Maternity care | 3 (1%) | 3 |
+| 54 | suicidal ideation | 3 (1%) | 6 |
+| 55 | National health standards | 3 (1%) | 6 |
+| 56 | emergency care demand | 3 (1%) | 6 |
+| 57 | National Insurance contributions | 3 (1%) | 4 |
+| 58 | Access to food services | 3 (1%) | 4 |
+| 59 | Racial inequality in healthcare | 3 (1%) | 5 |
+| 60 | Service Shaping | 3 (1%) | 3 |
+| 61 | Asylum funding | 3 (1%) | 7 |
+| 62 | Mismanagement in public funds | 3 (1%) | 4 |
+| 63 | Clinical decision-making | 3 (1%) | 5 |
+| 64 | Crisis intervention | 3 (1%) | 5 |
+| 65 | Veterans' health | 3 (1%) | 5 |
+| 66 | Community care | 3 (1%) | 5 |
+| 67 | Medical research | 3 (1%) | 6 |
+| 68 | Bacon rationing | 2 (1%) | 4 |
+| 69 | Statutory fees | 2 (1%) | 2 |
+| 70 | Building cost reduction | 2 (1%) | 3 |
+| 71 | Distribution of health information through clinics and online | 2 (1%) | 4 |
+| 72 | role of medical officers of health | 2 (1%) | 3 |
+| 73 | Criminal justice - child homicide | 2 (1%) | 2 |
+| 74 | population displacement | 2 (1%) | 2 |
+| 75 | Professional misconduct investigations | 2 (1%) | 2 |
+| 76 | Detention and legal processes | 2 (1%) | 2 |
+| 77 | Blood product safety | 2 (1%) | 9 |
+| 78 | Friendly societies and financial protection | 2 (1%) | 3 |
+| 79 | Housing infrastructure maintenance | 2 (1%) | 3 |
+| 80 | GP access | 2 (1%) | 2 |
+| 81 | Union insolvency | 2 (1%) | 2 |
+| 82 | Housing equipment and supplies | 2 (1%) | 3 |
+| 83 | Judicial wellbeing | 2 (1%) | 6 |
+| 84 | Impact of education funding reforms | 2 (1%) | 4 |
+| 85 | Animal disease control | 2 (1%) | 4 |
+| 86 | at-risk groups identification | 2 (1%) | 4 |
+| 87 | Alcohol abuse impact | 2 (1%) | 16 |
+| 88 | Working class hardship | 2 (1%) | 3 |
+| 89 | Postgraduate medical training | 2 (1%) | 6 |
+| 90 | Extension of existing care provisions | 2 (1%) | 2 |
+| 91 | Impact of Covid-19 | 2 (1%) | 5 |
+| 92 | Legal rights of vulnerable individuals | 2 (1%) | 2 |
+| 93 | Resident engagement in local decision-making | 2 (1%) | 2 |
+| 94 | Sickness benefit | 2 (1%) | 3 |
+| 95 | Non-medical clinicians in care decisions | 2 (1%) | 3 |
+| 96 | Medical error reporting | 2 (1%) | 5 |
+| 97 | Local government finance | 2 (1%) | 2 |
+| 98 | HIV/AIDS care and treatment | 2 (1%) | 5 |
+| 99 | Stigma in mental health | 2 (1%) | 5 |
+| 100 | cholera and diarrhoea treatment | 2 (1%) | 3 |
 
 E. Most common sub-topic phrases, verbatim, before grouping. These show the raw
-vocabulary and how much case and wording variation there is.
+vocabulary under the same expert HC→SC / JSON arm. Counts are lower than the
+clustered table because models rarely reuse an exact string.
 
 | Sub-theme phrase (verbatim) | Speeches | Total emissions |
 |---|---:|---:|
-| Public health | 45 | 130 |
-| public health | 31 | 65 |
-| Public Health | 26 | 84 |
-| Adult social care | 25 | 40 |
-| NHS funding | 23 | 128 |
-| Public health policy | 22 | 37 |
-| Care homes | 18 | 30 |
-| National Health Service | 15 | 76 |
-| NHS | 15 | 28 |
-| Social welfare | 14 | 21 |
-| Poor Law administration | 13 | 41 |
-| Poor Law | 12 | 22 |
-| Public health infrastructure | 12 | 25 |
-| NHS governance | 10 | 30 |
-| Mental health | 9 | 15 |
-| Workhouse conditions | 7 | 40 |
-| Disease prevention | 7 | 26 |
-| Housing conditions | 7 | 27 |
-| Mental health services | 7 | 29 |
-| Patient safety | 7 | 21 |
+| National Health Service | 11 | 15 |
+| Poor Law administration | 9 | 11 |
+| Disease prevention | 6 | 9 |
+| Social welfare provision | 6 | 6 |
+| NHS funding | 5 | 9 |
+| Healthcare funding | 5 | 6 |
+| Public health | 5 | 5 |
+| Tuberculosis treatment | 4 | 7 |
+| National Health Service funding | 4 | 7 |
+| Mental health services | 4 | 7 |
+| Workhouse conditions | 4 | 6 |
+| Housing conditions | 4 | 4 |
+| Mental Health | 4 | 4 |
+| Public Health | 4 | 4 |
+| Tuberculosis prevention | 3 | 5 |
+| Carer support | 3 | 5 |
+| Child welfare | 3 | 4 |
+| public health | 3 | 4 |
+| poor relief | 3 | 3 |
+| Poor Law reform | 3 | 3 |
 
 F. Pilot facts. 270 speeches, read by four models under eight prompt wordings each
 (32 reads per speech at temperature zero), producing 8,692 distinct sub-topic
-phrases and 15,634 total phrase emissions. That core grid is accompanied by
-controlled experiments matched to it on speech, model and format: the uncapped arm
-behind Section 5's cap finding (2,160 reads), the era-neutral definition arm
+phrases and 15,634 total phrase emissions on that core grid. Controlled
+experiments matched to it on speech, model and format accompany it: the uncapped
+arm behind Section 5's cap finding (2,160 reads), the era-neutral definition arm
 (2,160 reads), and the expert-definition arm in both sentence orders (4,320
-reads). The sample spans 1803 to the present. Sub-topics are generated by the
-models rather than chosen from a list. All figures come from the current pilot
-run.
+reads). Every positive read also returned free-text sub-topics; the topic map in
+Section 4 is built from the expert HC→SC definition under structured output
+(1,412 distinct phrases). The sample spans 1803 to the present. Sub-topics are generated by the models
+rather than chosen from a list. All figures come from the current pilot run.

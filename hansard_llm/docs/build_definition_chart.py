@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from hansard_llm import run, sample
+from hansard_llm.eras import ERA_LABELS, era_of
 
 OUT = Path(__file__).resolve().parent / "fig_definition_era.png"
 
@@ -35,18 +36,24 @@ LABELS = {
     "era_neutral": "Era-neutral",
 }
 INK, MUTED = "#1c1c1c", "#6b6b6b"
-ERAS = ["pre-1900", "1900-1947", "post-1948"]
+ERAS = ERA_LABELS
 
 
 def main() -> None:
-    df = run.load_results(to_parquet=False)
-    sel = df[(df["condition"] == "temp0") & (df["role"] == "none")
+    # pool == "pilot": the legacy log also carries retrieval spot-check rows
+    # under the same grid labels; those speeches are not in the pilot sample
+    # (no year lookup) and belong to a different population.
+    df = run.load_legacy()
+    sel = df[(df["pool"] == "pilot")
+             & (df["condition"] == "temp0") & (df["role"] == "none")
              & (df["task"] == "v1_nocap")
              & (df["definition"].isin(DEFS))
              & (df["output_format"].isin(["json", "free"]))].copy()
     yr = sample.load_sample().set_index("speech_id")["year"]
     sel["year"] = sel["speech_id"].map(yr)
-    sel["era"] = pd.cut(sel["year"].astype(int), [0, 1900, 1948, 2100], labels=ERAS)
+    # Shared left-closed bins: 1900 belongs to "1900-1947", 1948 (NHS founding)
+    # to "post-1948".
+    sel["era"] = era_of(sel["year"])
 
     piv = sel.pivot_table(index="era", columns="definition",
                           values="mentions_topic", aggfunc="mean",

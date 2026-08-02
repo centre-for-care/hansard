@@ -1,0 +1,286 @@
+cluster,label,n_phrases,n_speeches,members
+11,NHS funding and planning,71,41,NHS Burden; NHS Commissioning Board accountability; NHS Funding; NHS Response; NHS Services; NHS Support; NHS Workforce Planning; NHS access; NHS accountability; NHS administration costs; NHS administrative costs; NHS burden; NHS digital infrastructure; NHS efficiency and workforce retention; NHS financial regulations; NHS funding; NHS funding and charges; NHS funding and free services; NHS funding and free treatment; NHS funding and planning; NHS funding increase; NHS funding increases; NHS funding levels; NHS funding mechanisms; NHS funding model; NHS funding/affordability; NHS funding/defence; NHS funding/performance; NHS future; NHS healthcare research
+15,Public health,27,26,Public Health; Public Health Measures; Public Health Policy; Public health; Public health administration; Public health challenge; Public health collaboration; Public health concerns; Public health data; Public health impact; Public health information; Public health infrastructure; Public health infrastructure in low-income countries; Public health investigation; Public health investigations; Public health prioritization; Public health sanitation; Public health strategy; Public health surveillance; Public water health safety; public health; public health administration; public health concerns; public health crisis; public health infrastructure; public health inquiry; public health investigation
+13,Poor Law administration,34,22,Administration of poor law and care; Centralized control of poor relief; Classification of paupers; Classification of poor law relief; Parish-based poor relief system; Pauperism/Poor Relief; Poor Law Amendment; Poor Law Board administration; Poor Law Board oversight; Poor Law Commissioners; Poor Law Medical Care; Poor Law administration; Poor Law and social support; Poor Law reform; Poor Law relief; Poor law administration; Poor law medical relief; Poor law/pauperism; Poor relief and pauperism; Poor-law administration; Poverty and the Poor Law; Poverty and workhouses; Prevention of poor law penalties for thrift; Public opposition to Poor-law; Public opposition to poor relief system; Workhouse Reform; Workhouse reform; governance of poor law and social care administration; poor law and public health administration; poor law board oversight
+19,Access to healthcare,19,17,Access to care and treatment; Access to care in rural areas; Access to healthcare; Access to healthcare in rural areas; Access to healthcare services; Access to healthcare treatment; Access to quality healthcare; Access to treatment; Care and treatment access; Healthcare access; Healthcare access (rural areas); Healthcare access (under-doctored areas); Healthcare access in developing nations; Rural health needs; Rural healthcare access; Timely access to healthcare services; access to medical facilities; access to services; access to treatment services
+23,Social welfare provision,14,17,Funding for social services; Public assistance schemes; Social Welfare Administration; Social service funding; Social services funding; Social services management; Social welfare administration; Social welfare and mutual aid; Social welfare funding; Social welfare governance; Social welfare legislation; Social welfare provision; Social welfare requests; Social welfare support
+22,Health service funding,18,15,Capital expenditure for health infrastructure; Government financial commitments to health services; Health Service funding; Health service funding; Healthcare expenditure and revenue; Healthcare funding; Healthcare funding efficiency; Healthcare funding/economies; Healthcare spending targets; Hospital funding/expenditure; Integrated healthcare funding; Public Health Funding; Public expenditure on health and social care; Public health funding; Public health service investment; public financing of health services; public health funding; use of public funds for health infrastructure
+9,Poverty relief,16,13,Immigrant poverty; Pauper relief costs; Pauper relief systems; Poor relief funding; Poor relief provision; Poverty Relief; Poverty and support; Poverty and unemployment; Poverty relief; Poverty relief management; Support for elderly in poverty; Support for elderly poor; Support for the needy; Support for the poor; Support for the poor and elderly; cost of pauper relief
+3,Housing conditions,11,11,Affordable and social housing provision; Housing Conditions; Housing associations; Housing conditions; Housing costs; Housing for the working classes; Housing shortage; Housing standards; Social housing; housing conditions; housing shortages
+56,Old age support,21,9,"Care for pensioners; Elderly care; Financial support (pensions, savings); Financial support for the elderly; Old Age Pension; Old Age Support; Old age pensions; Old age support; Older people's independence; Pensioners support; Pensions (old age); Poverty in old age; Social Care for Elderly; Support for elderly with non-contributory pensions; Support for non-contributory pensioners; Support for older people's independence; Support for pensioners; old age pensions; older people care; social support for elderly; support for elderly people"
+32,Social care funding,12,9,Care funding; Cost of elderly care; Funding crisis in social care; Funding for social care services; Public funding for care; Residential care costs; Social care costs; Social care funding; Support for social care funding; funding for care; funding for social care; rate collection and taxation for social care
+96,Disease prevention,6,8,Disease Prevention; Disease prevention; Disease prevention (cholera); Prevention and public health education; disease prevention; disease prevention through sanitation
+164,Sanitation,12,8,Sanitary conditions; Sanitary conditions in public buildings; Sanitation; Sanitation issues; Sewage and sanitation; Sewer system and sanitation; Urban hygiene infrastructure; court sanitation and public health; sanitary conditions; sanitary conditions in public buildings; sanitation and nuisance control; urban sanitation measures
+121,Mental health services,13,7,Community mental health services; Hospital provision (mental health); Hospital provision for mental health; Mental Health Services; Mental health facilities; Mental health institutions; Mental health provision; Mental health services; Mental hospitals; mental health facilities; mental health institutional care; mental health services; report on mental health services
+67,tuberculosis treatment,10,6,Drug-resistant tuberculosis management; TB care and treatment; TB treatment; Treatment of drug-resistant tuberculosis; Tuberculosis control; Tuberculosis prevention; Tuberculosis treatment; tuberculosis prevention; tuberculosis treatment; tuberculosis treatment facilities
+44,Carer recognition and support,14,6,Care for carers; Carer Support; Carer engagement in healthcare; Carer involvement in care; Carer recognition and support; Carer support; Carer well-being; Emotional impact on carers; Mental health screening for carers; National Carers Strategy; Support for carers; Support for carers and community wellbeing; Support for carers of disabled young people; carer involvement in care planning
+71,child protection services,11,6,Child Protection; Child Protection Policy; Child protection services; Child welfare; Children in care; Children's residential care; Safeguarding vulnerable children; Workhouse care; child protection services; children's residential care; protection of young children in care settings
+8,Workhouse conditions,12,6,Impact of workhouse rules on families; Mental and physical well-being in workhouses; Public health (workhouse diet/discipline); Temporary accommodation for children of mothers in adult institutions; Workhouse Conditions; Workhouse conditions; Workhouse discipline and diet; Workhouse systems; care for women and children in poor law institutions; workhouse healthcare conditions; workhouse system; workhouses
+111,NHS resource allocation,8,5,Allocation of medical resources; Medical practice allocation; NHS resource allocation; NHS resource management; NHS resource protection; National Health Service resource allocation; health resource allocation; healthcare resource allocation
+30,Disease outbreak control,10,5,Disease outbreak control; Disease outbreak response; Epidemic control; Epidemic response; Infectious disease outbreak; epidemic response and management; epidemic response and medical aid; infectious disease outbreak; outbreak control; outbreak control measures
+51,Public health legislation,8,5,Healthcare legislation; Public Health Act; Public Health Act implementation; Public Health Legislation; Public health legislation; Public health regulation; public health legislation; public health regulation
+53,Social service structure,7,5,Social Service Structure; Social care system; Social service structure; Social service structure protection; Social services intervention; personal social services; social care services
+18,vaccination and immunisation,15,5,Childhood immunisation; Immunisation; Immunisation information and public education; Public immunisation education; Vaccination and immunisation; Vaccination prioritisation; Vaccination programs; Vaccination safety; immunisation; vaccination; vaccination and immunisation; vaccination policy; vaccination policy and decision-making; vaccination prioritisation; vaccination prioritization
+198,Pauper care,9,5,Access to quality healthcare for the poor; Medical appointments for poor; Medical appointments for poor relief; Medical relief for the poor; Pauper care; Prevention of pauperism among the sick; Residential care for the poor; healthcare access for the poor; pauper care practices
+200,social care regulation,8,5,Institutional care standards; National standards in social care; Social care oversight; Social care regulation; Social care standards; regulation of care admissions; regulation of local authority care facilities; social care regulation
+182,administration of old people's homes,10,5,Administration of old people's homes; Aged care homes; Old people's homes; Residential care; Residential care management; administration of care; administration of old people's homes; care homes; long-term care services; old people's homes
+107,Housing and public health,6,5,Housing and health infrastructure; Housing and public health; Public health housing; housing conditions affecting health; housing conditions affecting public health; model housing and health outcomes
+123,Mental Health Impact,5,5,Mental Health; Mental Health Impact; Mental health effects; Mental health problems; mental health impacts
+102,Hospital governance,12,5,Democratic governance of hospitals; Healthcare management; Hospital Management; Hospital administration and efficiency; Hospital endowment fund management; Hospital endowment funds management; Hospital governance; Hospital management; Hospital management and administration; Hospital management committees; hospital governance; hospital management
+211,Overcrowding,3,4,Overcrowding; Overcrowding reduction; overcrowding
+5,Hospital care,5,4,Hospital care; Hospital preservation; Hospital preservation and healthcare services; Hospital treatment; hospital care
+24,transparency in public health inquiries,4,4,Public visibility of health policy; Transparency of public health bodies; transparency in health decision-making; transparency in public health inquiries
+27,Patient charges/costs,6,4,Charging for medical procedures; Healthcare charges; Patient charges/costs; Patient penalties/fines; Patients paying for operations; patient penalties and fines
+63,Public charges for health services,6,4,Public charges for health services; Public charges for healthcare services; Public health charges; Public healthcare access; Public healthcare services; Public provision of healthcare
+58,impact of environmental hazards on health,8,4,Environmental Health; Environmental health hazards; Environmental health impacts; Impact of environment on illness; Impact of environmental hazards on residents' health; Impact of poor environment on health; Public health risks from unsanitary urban environments; impact of environmental hazards on health
+73,disease diagnosis,4,4,disease; disease detection and diagnosis; disease diagnosis; health diagnostics
+74,Administrative economies in healthcare,4,4,Administrative economies in healthcare; Administrative overhead costs in healthcare; Cost savings in healthcare management; Public asset management in healthcare
+41,pauperism,3,4,pauper treatment; pauperism; poor relief
+42,Support for victims,4,4,Support for Victims; Support for the vulnerable; Support for victims; Support for vulnerable immigrants
+149,Racial inequality in healthcare,4,3,Healthcare access inequality; Mental health services and racial inequality; Racial inequality in healthcare; Racism in healthcare settings
+130,NHS property,6,3,NHS estate management; NHS housing provision; NHS property; NHS property management; National Health Service staff housing; housing for NHS workers
+80,Mental capacity legislation,7,3,Legal frameworks for young people with incapacity; Mental Capacity; Mental capacity and decision-making; Mental capacity in young adults; Mental capacity legislation; Mental health and capacity law; Mental health legislation
+77,Service personnel healthcare access,4,3,Health Service Accounts; Service personnel healthcare; Service personnel healthcare access; healthcare services
+93,Centralisation in healthcare,6,3,Centralisation in healthcare; Centralisation of healthcare governance; Centralised control of healthcare; Decentralisation of Healthcare; Decentralisation of healthcare decisions; Devolution of health services
+275,Barrack conditions,3,3,Barrack conditions; Living conditions (barracks); Prison conditions
+105,hospital infrastructure development,7,3,Healthcare infrastructure; Hospital Design; Hospital Redevelopment; Hospital design flexibility; Hospital infrastructure; Hospital redevelopment; hospital infrastructure development
+117,NHS medical job opportunities,5,3,NHS careers; NHS doctor recruitment; NHS job offer communication; NHS job placement and employment support; NHS medical job opportunities
+50,housing accommodation,3,3,Temporary housing; access to accommodation; housing accommodation
+49,Community care,5,3,Community and family support; Community care; Community care development; Community healthcare delivery; community healthcare
+38,Rural housing,4,3,Agricultural worker housing; Prefabricated housing; Rural housing; Rural housing standards
+37,Parliamentary scrutiny of care regulations,4,3,Parliamentary scrutiny of care regulations; Parliamentary time allocation for health matters; Timing of health and social care legislation; parliamentary scrutiny of health regulations
+39,Local control in health services,4,3,Local Health Governance; Local control in health services; local decision-making in healthcare; local implementation of health policy
+442,Public funding allocation,3,3,Government funding allocation; Public funding allocation; funding and budget allocation
+4,Nursing workforce shortages,9,3,Children's nursing shortages; Children's ward nursing shortages; Maternity care workforce gaps; Midwifery staffing crisis; Nursing workforce; Nursing workforce shortages; Workforce crisis in health; Workforce crisis in healthcare; workforce crisis
+1,Medical Education,3,3,Health Education; Medical Education; Medical education coordination
+33,sanitary supervision and inspection,4,3,District medical inspections; Public health inspection; Sanitary supervision; sanitary supervision and inspection
+35,Basic salary for doctors,5,3,Basic salary for doctors; Basic salary for young doctors; Doctor remuneration/pay; Medical officer salary; medical officer salaries
+206,Nursing care,4,3,Children's nursing; Nursing care; Nursing in general hospitals; nursing care
+194,Professional accountability in healthcare,5,3,Healthcare Professional Accountability; Healthcare accountability; Professional accountability; Professional accountability and discipline; Professional accountability in healthcare
+205,Democratic planning in healthcare,5,3,Democratic planning in healthcare; Electoral participation in health care institutions; Meaningful consultation in healthcare planning; democratic participation in healthcare; democratic planning in healthcare
+165,Maternity care,3,3,Maternal health; Maternity care; Mother and baby care
+155,Department of Health oversight,5,3,Board of Health functions; Department of Health oversight; Department of Health procedures; Health commission; Health department oversight
+20,Two-tier healthcare system,3,3,Healthcare access based on contribution; Two-tier healthcare system; two-tier healthcare system
+84,Disability provision,5,3,Disability provision; Services for adults with disabilities; Wheelchair services; Wheelchair services provision; disability support
+60,Poor living conditions,5,3,Failure to provide adequate housing for the poor; Overcrowded housing; Overcrowding and living conditions; Poor living conditions; slum conditions
+82,Preventative healthcare,4,3,Preventative healthcare; Preventative screening; Preventive Care; preventive healthcare
+72,Quality of medical care,3,3,Healthcare quality improvement; Institutional health outcomes; Quality of medical care
+59,Food poverty,4,3,Food costs and access; Food poverty; Food poverty and food bank support; Food security/nutrition
+83,Infectious disease control,6,3,Infection Control; Infectious disease; Infectious disease control; Infectious disease response; infection treatment; treatment of infectious diseases
+70,Health professional training and support,4,3,Health professional training and support; Healthcare provider training and support; Training coordination for healthcare professionals; Training for healthcare staff
+43,Healthcare guidelines,5,3,Healthcare guidelines; NHS clinical guidance; Public health guidelines; healthcare guidance; public health guidance
+100,Patient involvement in healthcare,7,3,Patient Involvement; Patient autonomy in treatment decisions; Patient involvement in care; Patient involvement in healthcare; Public involvement in healthcare; Public involvement in healthcare decision-making; patient involvement in healthcare
+95,Integration of health and social care services,6,3,Integrated care; Integrated health and social care; Integrated health services; Integration of health and social care; Integration of health and social care services; care system integration
+253,Medication adherence,5,3,Medication Practices; Medication adherence; Medication adherence and treatment refusal; Medication compliance; Medication safety
+240,Healthcare agencies,3,3,Healthcare agencies; National health agencies; healthcare agency
+409,Government accountability in health policy,3,3,Governance and accountability in healthcare regulation; Government accountability in health infrastructure; Government accountability in health policy
+184,Health workforce planning,4,3,Health workforce planning; Healthcare planning; Healthcare workforce regulation and planning; Medical workforce allocation and mobility
+366,Regulation of practitioners,6,2,Professional regulation; Professional regulation of healthcare workers; Protection from unqualified practitioners; Regulation of medical practitioners; Regulation of practitioners; regulation of medical practitioners
+368,Well-being as a guiding principle,3,2,Mental and physical well-being in care; Well-being as a guiding principle; Well-being as guiding principle
+2,cholera and diarrhoea treatment,3,2,Cholera Morbus; cholera and diarrhoea treatment; cholera outbreak and public health
+376,Adult social care staffing,3,2,Adult social care staffing; Adult social care staffing shortages; Social care workforce
+52,Mental health nursing shortages,4,2,Mental health nursing; Mental health nursing decline; Mental health nursing shortages; Neglect in mental health care
+54,Post-war housing reconstruction,3,2,Post-war austerity; Post-war housing reconstruction; Post-war rebuilding and public health
+25,Doctor recruitment/oversupply,4,2,Doctor recruitment to under-doctored areas; Doctor recruitment/oversupply; Doctor workforce oversupply; Under-doctored areas and doctor distribution
+28,role of medical officers of health,2,2,local government role in public health enforcement; role of medical officers of health
+34,Health quango transparency,2,2,Health quango transparency; access to public health documentation
+36,Potential famine,2,2,Potential famine; famine and starvation
+369,Wheat rationing,3,2,Bacon rationing; Rationing; Wheat rationing
+365,Public trust in healthcare delivery,2,2,Public trust in healthcare delivery; community trust in health officials
+458,home care services,6,2,Home care provision; Home care service; Home care services; Home care/visits; home care; home care services
+460,healthcare costs,2,2,healthcare costs; private healthcare costs
+86,working class wellbeing,2,2,Working class hardship; working class wellbeing
+85,International nurse recruitment challenges,4,2,International nurse recruitment; International nurse recruitment challenges; Overseas nurse recruitment; Recruitment challenges in public healthcare
+64,National health standards,5,2,National Standard Setting; National health standards; National standard setting; National standards for care; National standards in healthcare
+65,Nursing education funding,3,2,Medical education funding; Nurse education funding; Nursing education funding
+87,Medical diagnosis,2,2,Diagnosis of illness; Medical diagnosis
+69,Reform of healthcare and social care regulatory bodies,3,2,Reform of healthcare and social care regulatory bodies; Regulatory body reform; Social care legislation reform
+109,Funding and expenditure oversight,2,2,Funding and expenditure oversight; Public sector financial oversight
+232,NHS Bill discussion,2,2,NHS Bill discussion; Parliamentary debate on NHS legislation
+118,Pauper burials,3,2,Pauper burials; Pauper funerals; Workhouse mortuary practices
+112,Cost efficiency in social welfare,3,2,Cost efficiency in social welfare; Public resource allocation for social programs; Resource constraints for social services
+89,Social care and support for vulnerable populations,2,2,Government support for social care initiatives; Social care and support for vulnerable populations
+91,Hospital closures,3,2,Hospital closure; Hospital closures; Hospital resource shortages
+256,Child Abuse,4,2,Child Abuse; Child Abuse Detection; Child abuse investigation; Child abuse/neglect
+244,Patient safety,3,2,Patient Safety; Patient safety; Patient safety monitoring
+76,Medical advice/oversight,2,2,Medical advice/oversight; Medical consultation
+78,land and building use for healthcare,2,2,Building construction (healthcare facilities); land and building use for healthcare
+81,Medical job availability,3,2,Doctor recruitment and job advertising; Medical Jobs; Medical job availability
+79,Medical research,4,2,Illness research; Medical Research; Medical research; medical research
+101,Regional health authority structure,3,2,Healthcare district organization; Regional health authority structure; Regional health boards
+94,Pandemic preparedness,4,2,Pandemic preparedness; Pandemic vaccine preparedness; government response to pandemic; pandemic preparedness
+45,Alcohol abuse impact,9,2,Alcohol Abuse; Alcohol abuse and domestic violence; Alcohol abuse impact; Alcohol's effect on family life and mental health; Alcohol-related emergency hospital admissions; Impact of alcohol on NHS resources; NHS burden from alcohol abuse; Substance abuse (alcohol); alcohol-related health impacts
+46,NHS Litigation,3,2,NHS Litigation; NHS conduct investigations; NHS litigation
+290,Mental Health Funding,3,2,Mental Health Funding; Mental health care funding; mental health institutions funding
+281,Lunatic Asylums,2,2,Lunatic Asylums; lunatic asylums
+299,Meals on wheels,2,2,Access to food services; Meals on wheels
+291,scientific advice in public health,2,2,scientific advice in health emergencies; scientific advice in public health
+315,physical well-being,2,2,Physical well-being and basic living standards; physical well-being
+316,Asylum funding/charges,5,2,Access to asylums for non-paupers; Asylum funding; Asylum funding/charges; asylum care; funding and fees for asylum care
+47,Housing infrastructure maintenance,2,2,Housing infrastructure maintenance; Maintenance and oversight of public facilities
+329,Financial support for the sick,2,2,Financial support for the sick; Support for sick and injured individuals
+61,Social worker training,7,2,Care worker training; Care worker training standards; Social Worker Training; Social worker training; Social worker training and support; care worker training; social work training and resourcing
+62,Sanatorium care,3,2,Nursing in tuberculosis sanatoria; Sanatorium care; access to sanatoria care
+228,National Insurance contributions,2,2,National Insurance as a tax affecting health financing; National Insurance contributions
+227,mental health treatment,3,2,Mental health treatment; mental health treatment; mental health treatment oversight
+210,slum clearance for public health,2,2,Slum clearance; slum clearance for public health
+226,Healthcare funding and cost barriers,2,2,Healthcare funding and cost barriers; Patient cost barriers
+231,Specialty Training,3,2,Postgraduate medical training; Specialty Training; Specialty training programmes
+230,Medical aid,3,2,Medical Relief; Medical aid; Medical aid provision
+145,Impact of Covid-19,5,2,Covid-19 and international health crisis; Covid-19 impact; Impact of Covid-19; impact of pandemic on global health and economies; impact of pandemic on vulnerable populations
+146,Protection of vulnerable patients,2,2,Protection of vulnerable patients; patients in care
+147,Capitation payment system,4,2,Capitation fees and income structure for doctors; Capitation payment system; Capped cost care system; Doctor remuneration (salary vs capitation)
+150,HIV/AIDS care and treatment,4,2,HIV/AIDS care; HIV/AIDS care and treatment; HIV/AIDS pandemic; HIV/AIDS prevention
+154,Healthcare regulatory agency oversight,2,2,Healthcare Regulation; Healthcare regulatory agency oversight
+152,Mental health (suicide prevention),2,2,Mental health (suicide prevention); Suicide prevention
+125,Healthcare policy discussion,2,2,Healthcare policy; Healthcare policy discussion
+124,Clinical Commissioning Groups,4,2,Clinical Commissioning Groups; Clinical commissioning; Devolved health authority; NHS Commissioning Board
+133,Social security budget,5,2,Social Security Budget; Social security; Social security budget; Social security budget allocation; Social security financing
+132,Clinical decision-making,3,2,Clinical Decision Making; Clinical decision-making; Clinician decision-making
+126,Death rates,3,2,Death rates; Death registration; death rates
+128,primary care,5,2,Primary care access; Primary care delivery; Primary care integration; primary care; primary care utilization
+204,Equity in employment conditions,2,2,Equity in employment conditions; Labour conditions
+193,Sickness benefit,3,2,Sickness benefit; Sickness benefit administration; sickness provision
+135,Global public health challenge,3,2,Global health initiatives; Global public health challenge; Global public health crisis
+134,mismanagement of care funds,2,2,Administrative irregularities in care funding; mismanagement of care funds
+411,Doctor Training,3,2,Doctor Training; Junior doctor training; Medical training and career progression
+412,Housing versus welfare,2,2,Housing versus welfare; Regional disparities in welfare provision
+424,Mismanagement in public funds,2,2,Mismanagement in public funds; Public fund misappropriation
+7,Welsh Board of Health,2,2,Welsh Board of Health; public health in Scotland
+157,School funding disparities,2,2,Impact of education funding reforms; School funding disparities
+181,Patient-centred services,6,2,Impact of patient feedback on service design; Patient experience of services; Patient-centred care services; Patient-centred services; Service design around patient needs; shaping services around patient needs
+174,Dental care access,5,2,Dental and optical treatment funding; Dental care access; Dental care access and provision; Dental treatment; Dental treatment funding
+171,Hospital discharge,5,2,Delayed hospital discharge; Hospital discharge; Hospital discharge and delayed transfers of care; Hospital discharge planning; hospital discharge
+144,Stigma in mental health,5,2,Mental health stigma; Social Stigma; Stigma in mental health; Stigma in mental health care; Stigma reduction
+137,Local taxation for relief,3,2,Local fiscal burden and taxation; Local taxation for relief; Local vs. union-wide taxation for poor rates
+186,Trauma support,2,2,Impact of trauma; Trauma support
+382,Doctor compensation,3,2,Doctor accountability; Doctor compensation; Doctor compensation and retirement
+386,Hospital administration costs,2,2,Administrative costs; Hospital administration costs
+404,living conditions and health,3,2,Living conditions impact; institutional living conditions; living conditions and health
+16,Social needs prioritization,2,2,Access to social support; Social needs prioritization
+12,Health and working conditions,7,2,Health and working conditions; Health of working life; Healthcare for Working Life; Workplace health hazards; Workplace health risks; health impacts of poor working conditions; workplace health risks
+10,parish infirmary construction,5,1,Infirmary construction; Parish healthcare infrastructure; Parish infirmaries; infirmary construction and management; parish infirmary construction
+14,Nursing and midwifery training bursary abolition,3,1,Abolition of nursing bursaries; Continuing professional development funding cuts; Nursing and midwifery training bursary abolition
+17,Children's nurseries in adult institutions,4,1,Children's nurseries in adult institutions; Regulation of nursery use in adult care premises; Separation of children's and adult care facilities; integration of nurseries in adult institutions
+21,Impact of relief on wages,3,1,Effect of relief systems on labour migration; Impact of poor laws on wages; Impact of relief on wages
+385,Sewage contamination in homes,3,1,Sewage contamination; Sewage contamination in homes; sewage contamination in homes
+389,Suicidal ideation,2,1,Suicidal ideation; suicidal ideation
+390,Regulation of AI in public services,2,1,AI and public service transformation; Regulation of AI in public services
+392,Supportive and palliative care,3,1,Supportive and palliative care; Supportive care; supportive and palliative care
+401,Care home patient penalties,2,1,Care home patient penalties; Care home regulations
+403,Healthcare supply chain,3,1,Healthcare supply chain; Healthcare supply chain resilience; Medicines supply chain
+439,Tobacco retail locations,2,1,Retail access to tobacco; Tobacco retail locations
+440,Sugar prices and health,3,1,Cheap sugar and health; Impact of sugar prices on public health; Sugar prices and health
+156,handling false allegations in child abuse cases,3,1,False Allegations Handling; False allegations in child abuse cases; handling false allegations in child abuse cases
+158,Personalised care,3,1,Personalisation of care; Personalised care; Whole-person care model
+160,Pain management,4,1,Pain management; Pain management in healthcare; Pain management integration; pain control
+161,Medication Effects,2,1,Medication Effects; Psychiatric medication effects
+162,Impact of media on healthcare professionals,2,1,Impact of media on healthcare professionals; Media scrutiny of healthcare professionals
+163,Vaccine interactions,2,1,Vaccine interactions; vaccine interactions
+166,Increased medical staff remuneration,2,1,Increased medical staff remuneration; Remuneration for medical staff
+167,Midwife regulation,4,1,"Midwife regulation; Midwifery supervision; Nurse regulation; Professional regulation of nurses, midwives, and health visitors"
+168,superannuation for substitute staff,2,1,Superannuation for medical staff; superannuation for substitute staff
+169,Courtroom health hazards,2,1,Court Health Conditions; Courtroom health hazards
+170,Tobacco use among young people,4,1,Tobacco control policy; Tobacco use among young people; Youth smoking rates; Youth tobacco use
+172,Compensation for work-related injuries,2,1,Compensation for work-related injuries; compensation for injuries
+173,vaccine stockpiling,2,1,Vaccine procurement; vaccine stockpiling
+176,Breast cancer screening for older women,2,1,Breast cancer screening for older women; breast screening
+178,Employer-employee codes of practice,2,1,Codes of practice for care employers and employees; Employer-employee codes of practice
+179,investigation of causes,2,1,investigation into outbreak causes; investigation of causes
+180,Patient safety and fitness to practise,2,1,Fitness to practice; Patient safety and fitness to practise
+183,disposal of surplus healthcare facilities,2,1,Surplus property disposal; disposal of surplus healthcare facilities
+185,District and community nursing cuts,3,1,District and community nursing cuts; District nursing cuts; Health visitor and school nurse reductions
+187,Multi-agency collaboration,4,1,Multi-Agency Collaboration; Multi-agency collaboration; Multi-agency collaboration in social care; multi-agency collaboration in social care
+188,Culturally appropriate mental health treatment,2,1,Culturally appropriate care; Culturally appropriate mental health treatment
+190,Care assessments,3,1,Care assessments; Care assessments and bureaucracy; Care assessments and funding
+138,Legal liability in healthcare contracts,3,1,Legal liability (healthcare); Legal liability in healthcare contracts; Legal responsibility in healthcare contracts
+139,NHS competition,4,1,Healthcare competition; NHS competition; NHS provider competition; healthcare competition
+140,Cancer diagnosis delays,2,1,Cancer diagnosis; Cancer diagnosis delays
+141,Health visitor roles,4,1,Health visitor public health role; Health visitor role; Health visitor roles; Public health role of health visitors
+142,Workplace injury,3,1,Factory worker injuries; Workplace injury; work-related injuries
+148,Subsidies for housing,2,1,Building subsidies; Subsidies for housing
+153,second opinion requirements for treatment,2,1,Second opinion requirements; second opinion requirements for treatment
+120,NHS service planning for TB,2,1,NHS service planning for TB; NHS service planning for infectious diseases
+122,Transplantation,3,1,Transplantation; organ and tissue transplantation; transplantation medicine
+127,Court jurisdiction (health/welfare),2,1,Court jurisdiction (health/welfare); Legal jurisdiction for care decisions
+131,occupational therapy,3,1,Occupational therapy; Occupational therapy and home adaptations; occupational therapy
+136,Parental attitudes and perceptions,2,1,Parental attitudes and perceptions; Parental attitudes toward vaccination
+191,Housing for people with disabilities,2,1,Accessible housing; Housing for people with disabilities
+192,School sanitation,2,1,School health; School sanitation
+195,Medical malpractice,2,1,Medical malpractice; Medical negligence claims
+196,Hepatitis C infection in haemophiliacs,2,1,Hepatitis C infection in haemophiliacs; hepatitis C infection in haemophilia patients
+197,Medication disparities,2,1,Medication disparities; Overmedication of minority patients
+201,antiviral treatment and prevention,2,1,Antiviral treatment availability; antiviral treatment and prevention
+202,Indoor air quality and ventilation,5,1,Indoor air quality; Indoor air quality and ventilation; Ventilation systems; ventilation and health; ventilation and indoor air quality
+203,Non-medical clinicians in care decisions,2,1,Non-medical clinicians in care decisions; role of non-doctor clinicians in mental health care
+207,Taxation and its impact on low-income groups,3,1,Taxation and income inequality; Taxation and its impact on low-income groups; Taxation on low-income households
+208,Delayed public health and social care funding,2,1,Delayed public health and social care funding; Public health and social care capital funding delays
+214,Cross-border healthcare use,2,1,Cross-border healthcare; Cross-border healthcare use
+217,Emergency hospital access,2,1,Emergency hospital access; emergency hospital arrangements
+219,Judicial wellbeing,2,1,Judicial wellbeing; health impacts on judicial officials
+220,Support services for alcoholics,4,1,Community-based support for alcoholism; Long-term care and recovery for alcoholics; Need for 24/7 alcohol advisory services; Support services for alcoholics
+221,Medical research (cure/vaccine),2,1,Medical research (cure/vaccine); Scientific research for cure and vaccine
+224,role of charities in social care,2,1,Charitable provision in social care; role of charities in social care
+225,Children's services and early years support,2,1,Children's centres; Children's services and early years support
+229,Specialist nursing care,3,1,Specialist nursing care; Specialist nursing for long-term conditions; specialised nursing
+104,Radiology services access,3,1,Diagnostic imaging access; Radiology services; Radiology services access
+106,disease transmission,3,1,Disease transmission routes; Pathogen transmission; disease transmission
+108,Agency model for health services,2,1,Agency model for health services; Role of external agencies in healthcare
+110,friendly societies,2,1,Friendly societies and financial protection; friendly societies
+113,Postal service contracts,2,1,Postal service contracts; Shipping services
+114,Blood product safety,6,1,Blood Product Safety; Blood product safety; Blood transfusion safety; Heat treatment of blood products; Self-sufficiency in blood products; blood product safety
+115,PCT budget collaboration,3,1,PCT budget collaboration; PCT budget pooling; PCT collaboration
+116,out-door relief,2,1,Out-door relief for the able-bodied; out-door relief
+119,Restraint Techniques,2,1,Restraint Techniques; Use of restraint in psychiatric care
+234,Salary cap restrictions for overseas staff,2,1,Salary cap barriers for overseas staff; Salary cap restrictions for overseas staff
+239,Medicines regulation and licensing,3,1,Medicines licensing; Medicines regulation; Medicines regulation and licensing
+248,X-ray film shortages in hospitals,3,1,Medical imaging shortages; X-ray film shortage; X-ray film shortages in hospitals
+254,Need for public inquiry into patient deaths,2,1,Inquest and accountability in healthcare; Need for public inquiry into patient deaths
+258,Medical profession independence,3,1,Independence of the medical profession; Medical profession independence; Medical professional independence
+261,Coercive treatment and patient autonomy,2,1,Coercion in treatment; Coercive treatment and patient autonomy
+265,AI in diagnostics,2,1,AI in diagnostics; AI in health diagnostics
+270,vaccination exemption procedures,2,1,vaccination exemption; vaccination exemption procedures
+271,at-risk groups identification,3,1,At-risk group identification; at-risk groups; at-risk groups identification
+276,SEN provision,2,1,SEN provision; Special educational needs provision
+88,Pay beds/private healthcare,5,1,Financial burden of pay beds in hospitals; Pay beds and private fees in public hospitals; Pay beds policy; Pay beds/private healthcare; Private fees for medical practitioners in pay beds
+90,Government coordination in health and housing,2,1,Government coordination in health and housing; Ministry of Health's role in housing
+92,AI and mental health,3,1,AI and mental health; AI and privacy; AI impact on mental health
+97,public health risks from flooding,5,1,Flood-related health risks; Health infrastructure affected by flooding; Housing and flooding; Public health risks from flooding; public health risks from flooding
+98,Reimbursement of private transport expenses,2,1,Reimbursement of private transport expenses; Transport costs for medical treatment
+99,Dental X-ray examinations,4,1,Dental X-ray examinations; Dental X-ray services; Dental examinations; Dental health diagnostics
+103,Global fund funding for health initiatives,2,1,Global fund funding for health initiatives; International health funding
+75,Crisis intervention,3,1,Crisis intervention; Crisis intervention and support services; Crisis intervention teams
+57,Soldier education,2,1,Soldier education; Soldier welfare
+66,Cord Blood Donation,3,1,Cord Blood Donation; Cord blood banking; cord blood donation
+68,NHS Staff Suspension,2,1,Mental health professional suspensions; NHS Staff Suspension
+283,Optical treatment,2,1,Optical treatment; Optical treatment funding
+289,Hospital supplies,2,1,Healthcare equipment supply; Hospital supplies
+294,mental deficiency hospitals,2,1,Mental deficiency care; mental deficiency hospitals
+295,VAT treatment of agency staff,2,1,VAT treatment in healthcare staffing; VAT treatment of agency staff
+300,hospital staffing regulations,3,1,Regulations affecting healthcare workers; hospital staffing regulations; nursing staff coverage in health regulations
+306,Clinical priorities,2,1,Clinical priorities; clinical priorities
+312,Medical practice ownership and sale,2,1,Medical practice ownership and sale; Medical practice partnerships and ownership
+322,management oversight in social services,2,1,Management failures in social services; management oversight in social services
+332,Accident & Emergency services,2,1,Accident & Emergency services; Accident and emergency services
+40,Medical error reporting,3,1,Disciplinary proceedings for medical errors; Medical Error Reporting; Medical error reporting
+48,NHS dental workforce shortages,4,1,Dental workforce shortages; Dentist staffing; NHS career attraction for dentists; NHS dental workforce shortages
+55,Baths/home equipment,2,1,Baths/home equipment; Housing equipment and supplies
+26,State vs. private pension provision,2,1,Pension Schemes; State vs. private pension provision
+29,Addiction services,3,1,Addiction services; Substance Abuse Treatment; mental health and addiction
+31,Advance care planning,4,1,Advance care planning; Documentation and validity of advance decisions; advance care planning; clinical documentation of patient wishes
+336,Veterans' health,2,1,Veterans' health; veterans' illnesses
+337,Mental health treatment in the community,3,1,Community treatment orders; Inpatient vs community treatment; Mental health treatment in the community
+338,Learning disability nursing,4,1,Learning disability care; Learning disability nursing; Learning disability nursing crisis; Learning disability nursing shortages
+339,Public sector salaries,2,1,Public official salaries in social care; Public sector salaries
+340,Health extension programs,2,1,Health extension programmes; Health extension programs
+341,family separation,3,1,Family separation; family separation; family separation in care settings
+342,patient capacity and decision-making,2,1,Patient capacity; patient capacity and decision-making
+344,End-of-life care,3,1,Clinician responsibilities in end-of-life care; End-of-life care; end-of-life care
+361,screening in pharmacies,3,1,Pharmacy-based screening; pharmacy screening; screening in pharmacies
+364,health spending as percentage of GDP,2,1,GDP as percentage of health spend; health spending as percentage of GDP
+378,Suicidal intent vs. refusal of treatment,2,1,Suicidal intent vs. refusal of treatment; suicide intent and treatment refusal
+6,Distribution of health information through clinics and online,3,1,Digital health information access; Distribution of health information materials; Distribution of health information through clinics and online
+0,pharmacy contractual framework,2,1,Pharmacy services; pharmacy contractual framework
+462,emergency care demand,2,1,Emergency care demand; emergency care demand
+464,Prevention in care services,2,1,Prevention in care; Prevention in care services
+465,Appeals and legal rights for doctors,2,1,Appeals and legal rights for doctors; Legal rights and appeals for doctors

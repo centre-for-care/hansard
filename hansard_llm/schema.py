@@ -32,13 +32,26 @@ from typing import Any
 
 @dataclass
 class Extraction:
-    """Parsed model output for one speech under one prompt variant."""
+    """Parsed model output for one speech under one prompt variant.
+
+    ``presence_inferred`` marks free-format rows where ``mentions_topic`` was
+    not stated by the model but inferred from the fact that it listed themes.
+    Analyses comparing formats must be able to exclude these rows: counting
+    them as positives is a *parser* decision, not a model output, and it
+    inflated the free-vs-JSON presence gap in the pilot by roughly half.
+
+    ``subthemes_raw`` keeps every theme the parser recovered regardless of the
+    presence verdict; ``subthemes`` remains the verdict-gated list (empty when
+    ``mentions_topic`` is falsy) that downstream metrics consume.
+    """
 
     mentions_topic: bool | None = None
     subthemes: list[str] = field(default_factory=list)
     evidence_quote: str = ""
     parse_ok: bool = False
     parse_error: str | None = None
+    presence_inferred: bool = False
+    subthemes_raw: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -168,6 +181,7 @@ def parse_json(text: str, max_n: int) -> Extraction:
         evidence_quote=str(quote)[:500],
         parse_ok=mt is not None,
         parse_error=err,
+        subthemes_raw=subs,
     )
 
 
@@ -257,9 +271,14 @@ def parse_free(text: str, max_n: int) -> Extraction:
     themes = _extract_free_themes(text, max_n)
 
     # Inference fallback: no explicit yes/no, but the model listed sub-themes —
-    # producing themes is itself an affirmative presence signal.
+    # producing themes is an affirmative signal, but it is the PARSER's
+    # inference, not the model's statement. It is flagged so analyses can
+    # exclude these rows: in the pilot the fallback alone accounted for ~half
+    # of the apparent free-vs-JSON presence gap.
+    inferred = False
     if mt is None and themes:
         mt = True
+        inferred = True
 
     subs = themes if mt else []
     quote = ""
@@ -274,6 +293,8 @@ def parse_free(text: str, max_n: int) -> Extraction:
         evidence_quote=quote[:500],
         parse_ok=mt is not None,
         parse_error=err,
+        presence_inferred=inferred,
+        subthemes_raw=themes,
     )
 
 

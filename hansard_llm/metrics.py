@@ -34,7 +34,11 @@ from . import config
 from .embed import EmbeddingCache
 from .prompts import TASK_UNCAPPED
 
-FACTORS = ("role", "task", "output_format", "family")
+# The model factor is model_id, not family: the qwen family holds two very
+# different models (30B-A3B and 235B-A22B), so grouping by family would leave
+# within-family size differences inside every "all else fixed" cell and
+# attribute them to whichever factor was being varied.
+FACTORS = ("role", "task", "output_format", "model_id")
 DEFAULT_TAU = 0.72  # cosine threshold for "same theme" (see embed smoke test)
 
 
@@ -114,6 +118,12 @@ def presence_agreement(df: pd.DataFrame) -> dict:
     """Agreement on ``mentions_topic`` across all grid cells, per speech.
 
     Each (variant x model) cell is a 'rater'; speeches are the items.
+
+    Caveat: the 32 cells are not independent raters — each model contributes 8
+    of them, so ratings within a model are correlated and alpha here overstates
+    the effective number of independent judgements. Read it as a descriptive
+    grid-stability index, not a literal inter-rater coefficient; for a
+    model-as-rater alpha, compute it over one cell per model.
     """
     core = _core(df)
     units = [list(g["mentions_topic"]) for _, g in core.groupby("speech_id")]
@@ -177,7 +187,7 @@ def prevalence_spread(df: pd.DataFrame) -> dict:
     whether it survives perturbation even when item labels flip.
     """
     core = _core(df)
-    cell = (core.groupby(["variant_id", "family"])["mentions_topic"]
+    cell = (core.groupby(["variant_id", "model_id"])["mentions_topic"]
             .apply(lambda s: s.dropna().mean()))
     return {
         "mean_prevalence": round(float(cell.mean()), 4),

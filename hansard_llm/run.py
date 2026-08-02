@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import config, schema
+from . import config, provenance, schema
 from .client import LLMClient
 from .config import ModelSpec, Topic
 from .prompts import (PromptVariant, TASK_UNCAPPED, build_definition_variants,
@@ -49,7 +49,9 @@ MAX_SPEECH_CHARS = 8000
 UNCAPPED_MAX_SUBTHEMES = 50   # generous ceiling: effectively "no cap", but bounds pathological output
 UNCAPPED_MAX_TOKENS = 1024    # up from the 512 default so long lists are not cut off
 
-RESULTS_LOG = config.ARTIFACTS_DIR / "pilot_results.jsonl"
+# The pre-provenance single log, frozen 2026-08-02. Read-only: new runs write
+# under runs/<experiment>/<run_id>/ instead (see execute / provenance.py).
+RESULTS_LOG = config.LEGACY_RESULTS_LOG
 
 
 @dataclass(frozen=True)
@@ -71,7 +73,12 @@ SELFCONSISTENCY = Condition(temperature=0.7, seed=None, n_reps=3, label="temp07"
 @dataclass
 class RunPlan:
     """What to execute. Defaults to the full core grid (temp 0) only; the
-    self-consistency probe is opt-in and typically run on a subset."""
+    self-consistency probe is opt-in and typically run on a subset.
+
+    ``pool`` labels which speech population the plan draws from (``pilot``,
+    ``filter_pool``, ``eval10k``, …) and is stamped on every row, so different
+    populations can never again be pooled silently under identical labels.
+    """
 
     speeches: pd.DataFrame
     topic: Topic
@@ -79,6 +86,7 @@ class RunPlan:
     models: tuple[ModelSpec, ...]
     conditions: tuple[Condition, ...] = (CORE,)
     max_workers: int = 16
+    pool: str = "pilot"
 
 
 def _cache_key(speech_id, prompt_hash, model_id, temperature, seed, rep) -> str:
@@ -101,6 +109,30 @@ def _load_done_keys(log_path: Path) -> set[str]:
             keys.add(_cache_key(r["speech_id"], r["prompt_hash"], r["model_id"],
                                 r["temperature"], r["seed"], r["rep"]))
     return keys
+
+
+def _experiment_logs(experiment: str) -> list[Path]:
+    """All results files already written for an experiment, oldest first."""
+    exp_dir = config.RUNS_DIR / experiment
+    if not exp_dir.exists():
+        return []
+    return sorted(exp_dir.glob("*/results.jsonl"))
+
+
+def _experiment_done_keys(experiment: str, *,
+                          include_legacy: bool = True) -> set[str]:
+    """Cache keys of every cell already completed for this experiment.
+
+    Scans all prior run directories, plus (by default) the frozen legacy log —
+    keys are exact (speech|prompt|model|temp|seed|rep), so consulting the
+    legacy log can only prevent double-billing, never wrongly skip new work.
+    """
+    done: set[str] = set()
+    for p in _experiment_logs(experiment):
+        done |= _load_done_keys(p)
+    if include_legacy:
+        done |= _load_done_keys(config.LEGACY_RESULTS_LOG)
+    return done
 
 
 @dataclass
@@ -162,6 +194,8 @@ def _run_one(client: LLMClient, job: _Job, topic: Topic) -> dict:
         "rep": job.rep,
         "mentions_topic": ex.mentions_topic,
         "subthemes": ex.subthemes,
+        "subthemes_raw": ex.subthemes_raw,
+        "presence_inferred": ex.presence_inferred,
         "evidence_quote": ex.evidence_quote,
         "parse_ok": ex.parse_ok,
         "parse_error": ex.parse_error,
@@ -179,19 +213,65 @@ def _run_one(client: LLMClient, job: _Job, topic: Topic) -> dict:
     }
 
 
-def execute(plan: RunPlan, *, log_path: Path = RESULTS_LOG,
-            verbose: bool = True) -> int:
-    """Run all not-yet-cached cells in ``plan``. Returns the number of new
-    cells written. Safe to call repeatedly — it resumes from the log."""
-    config.ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    done = _load_done_keys(log_path)
+def _write_run_manifest(plan: RunPlan, *, experiment: str, run_id: str,
+                        run_dir: Path, cli_args: dict | None = None) -> None:
+    provenance.write_manifest(run_dir, {
+        "experiment": experiment,
+        "run_id": run_id,
+        "pool": plan.pool,
+        "n_speeches": int(plan.speeches["speech_id"].nunique()),
+        "max_speech_chars": MAX_SPEECH_CHARS,
+        "models": [{"model_id": m.model_id, "family": m.family,
+                    "tier": m.tier, "reasoning": m.reasoning}
+                   for m in plan.models],
+        "conditions": [{"label": c.label, "temperature": c.temperature,
+                        "seed": c.seed, "n_reps": c.n_reps}
+                       for c in plan.conditions],
+        # Full prompt text per hash: a 12-char hash alone cannot tell you what
+        # was actually sent once the prompt code has moved on.
+        "variants": [{"variant_id": v.variant_id, "definition": v.definition,
+                      "prompt_hash": v.prompt_hash, "template": v._template()}
+                     for v in plan.variants],
+        "cli_args": cli_args or {},
+    })
+
+
+def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
+            include_legacy_cache: bool = True,
+            cli_args: dict | None = None) -> int:
+    """Run all not-yet-cached cells in ``plan`` under a fresh run directory
+    ``runs/<experiment>/<run_id>/``. Returns the number of new cells written.
+
+    Safe to call repeatedly: the idempotent cache spans every prior run of the
+    same experiment (and the frozen legacy log), so re-runs only execute cells
+    that are genuinely missing. Each invocation that has work to do creates its
+    own run directory with a manifest; an invocation with nothing to do
+    creates nothing.
+    """
+    done = _experiment_done_keys(experiment,
+                                 include_legacy=include_legacy_cache)
     jobs = _build_jobs(plan, done)
     total = len(jobs)
     if verbose:
-        print(f"{len(done)} cells already done; {total} new cells to run "
-              f"({plan.max_workers} workers)")
+        print(f"[{experiment}] {len(done)} cells already done; "
+              f"{total} new cells to run ({plan.max_workers} workers)")
     if not total:
         return 0
+
+    run_id = provenance.new_run_id()
+    run_dir = provenance.run_dir(experiment, run_id)
+    _write_run_manifest(plan, experiment=experiment, run_id=run_id,
+                        run_dir=run_dir, cli_args=cli_args)
+    log_path = run_dir / "results.jsonl"
+    extras = {
+        "experiment": experiment,
+        "run_id": run_id,
+        "pool": plan.pool,
+        "code_version": provenance.git_sha(),
+        "backend": config.backend_name(),
+    }
+    if verbose:
+        print(f"[{experiment}] run {run_id} -> {log_path}")
 
     client = LLMClient()
     write_lock = threading.Lock()
@@ -202,7 +282,7 @@ def execute(plan: RunPlan, *, log_path: Path = RESULTS_LOG,
             ThreadPoolExecutor(max_workers=plan.max_workers) as pool:
         futs = {pool.submit(_run_one, client, j, plan.topic): j for j in jobs}
         for fut in as_completed(futs):
-            row = fut.result()
+            row = {**fut.result(), **extras}
             with write_lock:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
                 fh.flush()
@@ -242,19 +322,22 @@ def reparse_results(df: pd.DataFrame, topic: Topic | None = None) -> pd.DataFram
     out = df.copy()
     out["mentions_topic"] = [e.mentions_topic for e in parsed]
     out["subthemes"] = [e.subthemes for e in parsed]
+    out["subthemes_raw"] = [e.subthemes_raw for e in parsed]
+    out["presence_inferred"] = [e.presence_inferred for e in parsed]
     out["evidence_quote"] = [e.evidence_quote for e in parsed]
     out["parse_ok"] = [e.parse_ok for e in parsed]
     out["parse_error"] = [e.parse_error for e in parsed]
     return out
 
 
-def load_results(log_path: Path = RESULTS_LOG, *, to_parquet: bool = True,
+def load_results(log_path: Path = RESULTS_LOG, *, to_parquet: bool = False,
                  reparse: bool = True) -> pd.DataFrame:
-    """Compile the JSONL log into a DataFrame.
+    """Compile one JSONL log into a DataFrame.
 
     With ``reparse=True`` (default) the parsed columns are recomputed from
     ``raw_text`` via the current schema, so the returned frame always reflects
-    the latest parser.
+    the latest parser. ``to_parquet`` defaults to False: overwriting the shared
+    snapshot must be an explicit choice, not a side effect of loading.
     """
     if not log_path.exists():
         raise FileNotFoundError(f"No results log at {log_path}")
@@ -271,6 +354,63 @@ def load_results(log_path: Path = RESULTS_LOG, *, to_parquet: bool = True,
         df = reparse_results(df)
     if to_parquet:
         df.to_parquet(config.RESULTS_PATH, index=False)
+    return df
+
+
+def load_experiment(experiment: str, *, reparse: bool = True) -> pd.DataFrame:
+    """Concatenate every run of an experiment from the versioned store."""
+    logs = _experiment_logs(experiment)
+    if not logs:
+        raise FileNotFoundError(
+            f"No runs for experiment {experiment!r} under {config.RUNS_DIR}")
+    frames = [load_results(p, reparse=False) for p in logs]
+    df = pd.concat(frames, ignore_index=True)
+    if reparse:
+        df = reparse_results(df)
+    return df
+
+
+def _legacy_pool_labels(df: pd.DataFrame) -> pd.Series:
+    """Reconstruct which population each legacy row came from.
+
+    The legacy log mixed two populations under identical grid labels: the
+    270-speech pilot sample and the 150 filter-pool speeches labelled by the
+    retrieval spot-check. Membership is recoverable from the sample parquet
+    and the spot-check id list (the pools were drawn disjoint).
+    """
+    from . import sample
+    pilot_ids = set(sample.load_sample()["speech_id"])
+    spot_path = config.ARTIFACTS_DIR / "retrieval_spotcheck_ids.json"
+    spot_ids: set = set()
+    if spot_path.exists():
+        spot_ids = {r["speech_id"] for r in
+                    json.loads(spot_path.read_text(encoding="utf-8"))}
+    return pd.Series(
+        ["pilot" if sid in pilot_ids
+         else "filter_pool" if sid in spot_ids
+         else "unknown"
+         for sid in df["speech_id"]],
+        index=df.index, dtype="object")
+
+
+def load_legacy(*, reparse: bool = True,
+                write_annotated: bool = False) -> pd.DataFrame:
+    """The frozen pre-provenance log, with the provenance columns backfilled.
+
+    Adds ``pool`` (pilot | filter_pool | unknown — see ``_legacy_pool_labels``)
+    plus constant ``experiment``/``run_id``/``code_version``/``backend`` markers
+    so legacy rows can be concatenated with versioned-store rows. Analyses of
+    the pilot must filter ``pool == "pilot"``.
+    """
+    df = load_results(config.LEGACY_RESULTS_LOG, reparse=reparse)
+    df["pool"] = _legacy_pool_labels(df)
+    df["experiment"] = "legacy_pilot"
+    df["run_id"] = "legacy"
+    df["code_version"] = "pre-provenance"
+    df["backend"] = "nebius"
+    if write_annotated:
+        config.LEGACY_DIR.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(config.LEGACY_ANNOTATED_PATH, index=False)
     return df
 
 
@@ -417,10 +557,13 @@ if __name__ == "__main__":
                      f"choose from {tuple(config.HSC_DEFINITIONS)}")
         plan = definition_plan(definitions=ids, n_speeches=args.n_speeches,
                                conditions=conds, max_workers=args.workers)
+        experiment = "pilot_definitions"
     else:
-        builder = (uncapped_role_plan if args.role_check
-                   else uncapped_plan if args.no_cap else default_plan)
+        builder, experiment = (
+            (uncapped_role_plan, "pilot_role") if args.role_check
+            else (uncapped_plan, "pilot_uncapped") if args.no_cap
+            else (default_plan, "pilot_core"))
         plan = builder(n_speeches=args.n_speeches, conditions=conds,
                        max_workers=args.workers)
-    n = execute(plan)
+    n = execute(plan, experiment=experiment, cli_args=vars(args))
     print(f"wrote {n} new cells")

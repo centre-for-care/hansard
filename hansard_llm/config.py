@@ -44,6 +44,13 @@ ARTIFACTS_DIR = _resolved("HANSARD_LLM_ARTIFACTS_DIR", _DATA_HOME / "artifacts" 
 SAMPLE_PATH = ARTIFACTS_DIR / "pilot_sample.parquet"
 RESULTS_PATH = ARTIFACTS_DIR / "pilot_results.parquet"
 
+# Versioned results store (see provenance.py). New experiment runs write under
+# runs/<experiment>/<run_id>/; the pre-provenance single log is frozen here.
+RUNS_DIR = ARTIFACTS_DIR / "runs"
+LEGACY_DIR = ARTIFACTS_DIR / "legacy"
+LEGACY_RESULTS_LOG = LEGACY_DIR / "pilot_results.frozen-20260802.jsonl"
+LEGACY_ANNOTATED_PATH = LEGACY_DIR / "pilot_results_annotated.parquet"
+
 
 def _require(key: str) -> str:
     val = os.environ.get(key)
@@ -61,6 +68,23 @@ def base_url() -> str:
 
 def api_key() -> str:
     return _require("LLM_API_KEY")
+
+
+def base_url_host() -> str:
+    """Hostname of the serving endpoint (for provenance rows/manifests)."""
+    from urllib.parse import urlparse
+    try:
+        return urlparse(base_url()).hostname or "unknown"
+    except RuntimeError:
+        return "unset"
+
+
+def backend_name() -> str:
+    """Label for which serving stack produced a row: ``LLM_BACKEND_NAME`` if
+    set (e.g. ``vllm-cluster``), else derived from the endpoint host. The same
+    model served by Nebius and by a local vLLM is not guaranteed to produce
+    identical output, so rows must record which one they came from."""
+    return os.environ.get("LLM_BACKEND_NAME") or base_url_host()
 
 
 # --------------------------------------------------------------------------

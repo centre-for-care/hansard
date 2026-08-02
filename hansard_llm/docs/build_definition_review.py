@@ -63,10 +63,12 @@ def _cell(row) -> dict:
 
 
 def build_data() -> list[dict]:
-    df = run.load_results()
+    df = run.load_legacy()
     # Matched on the shipping default so the only thing differing across arms
-    # is the definition text.
-    df = df[(df["condition"] == "temp0") & (df["role"] == "none")
+    # is the definition text. pool == "pilot" drops the retrieval spot-check
+    # rows that share these grid labels but come from a different population.
+    df = df[(df["pool"] == "pilot")
+            & (df["condition"] == "temp0") & (df["role"] == "none")
             & (df["task"] == "v1_nocap")
             & (df["definition"].isin(DEFS))
             & (df["output_format"].isin(FORMATS))].copy()

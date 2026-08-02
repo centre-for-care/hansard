@@ -32,7 +32,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 
 from . import config, run, sample
 from .config import ModelSpec
-from .embed import EMBED_MODEL
+from .embed import EMBED_MODEL, embed_texts, make_client
 from .prompts import TASK_UNCAPPED, build_definition_variants
 
 # --------------------------------------------------------------------------
@@ -127,22 +127,13 @@ def split_chunks(text: str) -> list[str]:
 # Embedding clients / caches
 # --------------------------------------------------------------------------
 def _embed_client() -> OpenAI:
-    return OpenAI(base_url=config.base_url(), api_key=config.api_key())
+    return make_client()
 
 
 def _embed_raw(texts: list[str], client: OpenAI | None = None) -> np.ndarray:
-    cli = client or _embed_client()
-    out: list[list[float]] = []
-    for i in range(0, len(texts), _BATCH):
-        chunk = texts[i: i + _BATCH]
-        resp = cli.embeddings.create(model=EMBED_MODEL, input=chunk)
-        # API may return out of order; sort by index
-        data = sorted(resp.data, key=lambda d: d.index)
-        out.extend(d.embedding for d in data)
-        print(f"  embedded {min(i + _BATCH, len(texts))}/{len(texts)}", flush=True)
-    arr = np.asarray(out, dtype=np.float32)
-    arr /= np.linalg.norm(arr, axis=1, keepdims=True) + 1e-12
-    return arr
+    """Retrying, index-sorted, unit-normalised embedding (see embed.embed_texts)."""
+    return embed_texts(texts, client or _embed_client(), batch=_BATCH,
+                       verbose=True)
 
 
 class SpeechEmbeddingCache:
@@ -171,7 +162,8 @@ class SpeechEmbeddingCache:
         return f"{speech_id}|{_content_hash(text)}|whole"
 
     def ensure(self, items: list[tuple[object, str]]) -> None:
-        """``items`` is a list of (speech_id, truncated_text)."""
+        """``items`` is a list of (speech_id, truncated_text). Saves after
+        every slice so an interrupted run keeps its progress on disk."""
         missing_keys: list[str] = []
         missing_texts: list[str] = []
         for sid, text in items:
@@ -184,12 +176,15 @@ class SpeechEmbeddingCache:
         print(f"embedding {len(missing_texts)} whole speeches…")
         if self._client is None:
             self._client = _embed_client()
-        vecs = _embed_raw(missing_texts, self._client)
-        self._mat = vecs if self._mat is None else np.vstack([self._mat, vecs])
-        for k in missing_keys:
-            self._index[k] = len(self._keys)
-            self._keys.append(k)
-        self._save()
+        save_every = 512
+        for i in range(0, len(missing_texts), save_every):
+            vecs = _embed_raw(missing_texts[i: i + save_every], self._client)
+            self._mat = (vecs if self._mat is None
+                         else np.vstack([self._mat, vecs]))
+            for k in missing_keys[i: i + save_every]:
+                self._index[k] = len(self._keys)
+                self._keys.append(k)
+            self._save()
 
     def matrix(self, items: list[tuple[object, str]]) -> np.ndarray:
         self.ensure(items)
@@ -253,6 +248,13 @@ class ChunkEmbeddingCache:
 
 
 class QueryEmbeddingCache:
+    """Query vectors keyed by ``query_id|content_hash``.
+
+    Keying by content hash (not id alone) means editing a definition text in
+    config.py automatically invalidates its stale vector — the failure mode of
+    the original id-only cache, which would silently reuse the old embedding.
+    """
+
     def __init__(self) -> None:
         self._keys: list[str] = []
         self._index: dict[str, int] = {}
@@ -270,24 +272,29 @@ class QueryEmbeddingCache:
         np.save(_QUERY_VECS, self._mat)
         _QUERY_KEYS.write_text(json.dumps(self._keys), encoding="utf-8")
 
+    @staticmethod
+    def key(query_id: str, text: str) -> str:
+        return f"{query_id}|{_content_hash(text)}"
+
     def ensure(self, queries: dict[str, str]) -> None:
-        missing_ids = [qid for qid in queries if qid not in self._index]
-        if not missing_ids:
+        missing = [(qid, text) for qid, text in queries.items()
+                   if self.key(qid, text) not in self._index]
+        if not missing:
             return
-        print(f"embedding {len(missing_ids)} queries…")
-        texts = [queries[q] for q in missing_ids]
-        vecs = _embed_raw(texts)
+        print(f"embedding {len(missing)} queries…")
+        vecs = _embed_raw([text for _, text in missing])
         self._mat = vecs if self._mat is None else np.vstack([self._mat, vecs])
-        for qid in missing_ids:
-            self._index[qid] = len(self._keys)
-            self._keys.append(qid)
+        for qid, text in missing:
+            self._index[self.key(qid, text)] = len(self._keys)
+            self._keys.append(self.key(qid, text))
         self._save()
 
-    def vector(self, query_id: str) -> np.ndarray:
-        return self._mat[self._index[query_id]]
+    def vector(self, query_id: str, text: str) -> np.ndarray:
+        return self._mat[self._index[self.key(query_id, text)]]
 
-    def matrix(self, query_ids: list[str]) -> np.ndarray:
-        return np.vstack([self.vector(q) for q in query_ids])
+    def matrix(self, queries: dict[str, str]) -> np.ndarray:
+        return np.vstack([self.vector(qid, text)
+                          for qid, text in queries.items()])
 
 
 # --------------------------------------------------------------------------
@@ -371,10 +378,16 @@ def load_filter_pool() -> pd.DataFrame:
 def pilot_majority_gold(
     definition: str = "expert_hc_sc",
 ) -> pd.DataFrame:
-    """Speech-level majority ``mentions_topic`` under the shipping default."""
-    df = run.load_results(to_parquet=False)
+    """Speech-level majority ``mentions_topic`` under the shipping default.
+
+    Restricted to the pilot pool: the legacy log also holds filter-pool rows
+    from the spot-check under identical grid labels, rated by only 2 models
+    instead of 4 — pooling them would silently mix different rater counts.
+    """
+    df = run.load_legacy()
     sel = df[
-        (df["condition"] == "temp0")
+        (df["pool"] == "pilot")
+        & (df["condition"] == "temp0")
         & (df["role"] == "none")
         & (df["task"] == TASK_UNCAPPED)
         & (df["definition"] == definition)
@@ -411,7 +424,7 @@ def score_pool(
     ]
     query_cache.ensure(queries)
     qids = list(queries)
-    Q = query_cache.matrix(qids)  # (Q, d)
+    Q = query_cache.matrix(queries)  # (Q, d)
 
     rows: list[dict] = []
     meta = speeches.set_index("speech_id")
@@ -631,14 +644,25 @@ def run_spotcheck(
         models=models,
         conditions=(run.CORE,),
         max_workers=max_workers,
+        pool="filter_pool",
     )
-    n = run.execute(plan)
+    # Own experiment, own run directory: spot-check rows must never share a
+    # log with pilot rows again (that mixing broke the definition chart and
+    # contaminated the majority gold in the pre-provenance store).
+    n = run.execute(plan, experiment="retrieval_spotcheck")
     print(f"spotcheck wrote {n} new cells")
     return speeches
 
 
 def summarize_spotcheck(spot_meta: pd.DataFrame) -> list[dict]:
-    df = run.load_results(to_parquet=False)
+    # Spot-check rows live in the legacy log (pre-provenance runs) and/or the
+    # versioned retrieval_spotcheck experiment; read both.
+    frames = [run.load_legacy()]
+    try:
+        frames.append(run.load_experiment("retrieval_spotcheck"))
+    except FileNotFoundError:
+        pass
+    df = pd.concat(frames, ignore_index=True)
     sel = df[
         (df["condition"] == "temp0")
         & (df["role"] == "none")
