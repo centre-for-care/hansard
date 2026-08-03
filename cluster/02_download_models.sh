@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Download model weights into the HF cache on scratch. Run on whichever node
-# has internet (discovery step tells you); if only login nodes do, run it there
-# (downloads are IO-bound, no GPU needed). Idempotent — hf download resumes.
+# Download model weights into the HF cache on /well. BMRC compute nodes have
+# no internet — run this on a LOGIN node (downloads are IO-bound, no GPU
+# needed; do the 340GB LLM batch in stages, e.g. inside tmux). Idempotent —
+# hf download resumes.
 #
 #   source ~/.config/hansard_llm.env && source "$VENV_DIR/bin/activate"
 #   bash cluster/02_download_models.sh [embedders|llms|all]
@@ -12,6 +13,10 @@
 
 set -euo pipefail
 WHAT="${1:-all}"
+
+# The shared env file forces offline mode for compute nodes; this script is
+# the one place that must actually reach the hub.
+unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
 
 EMBEDDERS=(
   Qwen/Qwen3-Embedding-0.6B

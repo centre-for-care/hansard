@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=vllm-serve
-#SBATCH --partition=gpu            # EDIT: from 00_discovery output
-#SBATCH --gres=gpu:1               # EDIT per model (see table below)
+#SBATCH --account=gpu_mills.prj
+#SBATCH --partition=gpu_a100_80gb  # gpu_gh200_144gb was DOWN at discovery (2026-08-03);
+                                   # switch back once it's up — 144GB fits all panel LLMs bf16
+#SBATCH --qos=gpu_bmrc_24hr        # priority boost; caps runtime at 24h
+#SBATCH --gres=gpu:1               # per model (see table below)
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=96G
 #SBATCH --time=24:00:00
@@ -21,7 +24,12 @@
 
 set -euo pipefail
 source ~/.config/hansard_llm.env
-source "$VENV_DIR/bin/activate"
+# Arch-aware venv: GH200 nodes are ARM and need the venv from 01b.
+if [ "$(uname -m)" = "aarch64" ]; then
+  source "${VENV_DIR_ARM:?run 01b_setup_env_gh200.sh first}/bin/activate"
+else
+  source "$VENV_DIR/bin/activate"
+fi
 mkdir -p logs
 
 MODEL="${MODEL:?export MODEL=<hf model id>}"

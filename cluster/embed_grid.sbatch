@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=embed-grid
-#SBATCH --partition=gpu            # EDIT: from 00_discovery output
+#SBATCH --account=gpu_mills.prj
+#SBATCH --partition=gpu_a100_40gb,gpu_rtx8000_48gb  # embedders <=8B fit 40GB
+#SBATCH --qos=gpu_bmrc_24hr
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G

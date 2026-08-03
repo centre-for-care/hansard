@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=hansard-grid
-#SBATCH --partition=gpu            # EDIT: from 00_discovery output
-#SBATCH --gres=gpu:1               # EDIT: gpu:a100:1 etc; 2 for tensor-parallel
+#SBATCH --account=gpu_mills.prj
+#SBATCH --partition=gpu_a100_80gb  # gpu_gh200_144gb was DOWN at discovery (2026-08-03);
+                                   # switch back once it's up — 144GB fits all panel LLMs bf16
+#SBATCH --qos=gpu_bmrc_24hr        # <=24h jobs get a large priority boost
+#SBATCH --gres=gpu:1               # 80GB: Nemotron-49B needs VLLM_ARGS="--quantization fp8"
+                                   # (or gpu:2 + "--tensor-parallel-size 2" for bf16)
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=96G
 #SBATCH --time=12:00:00
@@ -23,7 +27,12 @@
 
 set -euo pipefail
 source ~/.config/hansard_llm.env
-source "$VENV_DIR/bin/activate"
+# Arch-aware venv: GH200 nodes are ARM and need the venv from 01b.
+if [ "$(uname -m)" = "aarch64" ]; then
+  source "${VENV_DIR_ARM:?run 01b_setup_env_gh200.sh first}/bin/activate"
+else
+  source "$VENV_DIR/bin/activate"
+fi
 mkdir -p logs
 
 MODEL="${MODEL:?export MODEL=<hf model id>}"
