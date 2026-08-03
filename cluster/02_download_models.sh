@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
-# Download model weights into the HF cache on /well. BMRC compute nodes have
-# no internet — run this on a LOGIN node (downloads are IO-bound, no GPU
-# needed; do the 340GB LLM batch in stages, e.g. inside tmux). Idempotent —
-# hf download resumes.
+# Download model weights into the HF cache on /well. Login node only (compute
+# nodes have no internet); use tmux for the big LLM batch. Idempotent/resumable.
+# Gated models (Gemma, Nemotron) need `hf auth login` once.
 #
-#   source ~/.config/hansard_llm.env && source "$VENV_DIR/bin/activate"
-#   bash cluster/02_download_models.sh [embedders|llms|all]
-#
-# Sizes (fp16/bf16 unless noted): embedders ~20GB total; LLMs ~340GB total.
-# Check scratch quota first. Gated models (Llama, Gemma) need
-# `hf auth login` once with a HF token that has accepted their licenses.
+#   bash cluster/02_download_models.sh [embedders|llms|all|<hf-model-id>...]
 
 set -euo pipefail
 WHAT="${1:-all}"
 
-# The shared env file forces offline mode for compute nodes; this script is
-# the one place that must actually reach the hub.
+# The shared env file forces offline mode for compute nodes; downloads are
+# the one place that must reach the hub.
 unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
 
 EMBEDDERS=(
@@ -29,8 +23,7 @@ EMBEDDERS=(
   nomic-ai/nomic-embed-text-v1.5
 )
 
-# Panel + extended model axis (see plan C2). Nemotron-Super-49B replaces
-# Llama-3.3-70B as the large-model panelist; FP8 fits one 80GB GPU.
+# Panel + extended axis (plan C2). Nemotron-Super-49B: FP8 on one 80GB GPU.
 LLMS=(
   Qwen/Qwen3-30B-A3B-Instruct-2507
   google/gemma-3-27b-it
@@ -41,13 +34,14 @@ LLMS=(
   mistralai/Mistral-Small-3.2-24B-Instruct-2506
 )
 
-dl() { for m in "$@"; do echo "== $m"; hf download "$m" >/dev/null && echo "   ok"; done; }
+dl() { for m in "$@"; do echo "== $m"; hf download "$m" && echo "   ok"; done; }
 
 case "$WHAT" in
   embedders) dl "${EMBEDDERS[@]}" ;;
   llms)      dl "${LLMS[@]}" ;;
   all)       dl "${EMBEDDERS[@]}"; dl "${LLMS[@]}" ;;
-  *) echo "usage: $0 [embedders|llms|all]"; exit 1 ;;
+  -h|--help) echo "usage: $0 [embedders|llms|all|<hf-model-id>...]"; exit 0 ;;
+  *)         dl "$@" ;;   # explicit ids, for pipelined download+run
 esac
 
 echo; echo "cache usage:"; du -sh "${HF_HOME:-$HOME/.cache/huggingface}"

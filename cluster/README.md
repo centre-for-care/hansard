@@ -57,7 +57,7 @@ Cluster*). Help: bmrc-help@medsci.ox.ac.uk — quote your job ID.
 | 2 | `01_setup_env.sh` | login node | `HANSARD_SCRATCH=/well/<group>/users/$USER/hansard-scratch`; x86 venv (embedders/analysis) + `~/.config/hansard_llm.env` |
 | 2b | `01b_setup_env_gh200.sh download` | login node | cross-downloads aarch64 wheels (fails fast if one is missing) |
 | 2c | `01b_setup_env_gh200.sh install` | GH200 node (srun) | offline ARM venv for vLLM; records `VENV_DIR_ARM` |
-| 3 | upload data | laptop | FileZilla or WSL rsync: `full_data_enriched.parquet`, `pilot_sample.parquet`, `eval10k_sample.parquet`, `legacy/` (paths in `01_setup_env.sh`) |
+| 3 | upload data | laptop | scp/FileZilla: `eval10k_sample.parquet` → `artifacts/llm/` is all the experiments need. Optional, when a task demands them: `pilot_sample.parquet` + `legacy/` → `artifacts/llm/` (pilot-referencing analyses), `.env` → scratch root (Nebius fallback), `full_data_enriched.parquet` → `data/` (drawing new samples) |
 | 4 | `02_download_models.sh` | login node | `embedders` first (~20GB), `llms` later (~340GB); gated repos (Llama/Gemma) need `hf auth login` |
 | 5 | `embed_grid.sbatch` | sbatch | job array 0–7, one embedder per task, 40GB partitions |
 | 6 | `run_grid.sbatch` | sbatch | serve model + run experiment in one job, GH200 |

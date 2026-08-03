@@ -10,10 +10,8 @@
 #SBATCH --array=0-7                # one task per embedder (see MODELS below)
 #SBATCH --output=logs/%x-%A_%a.out
 
-# Embedder-sensitivity grid: job array, one embedding model per task, each
-# embedding the eval subset in all representations and scoring all definition
-# queries. Driven by hansard_llm/embedder_grid.py (local sentence-transformers
-# backend — no server needed).
+# Embedder grid: one model per array task, scoring the eval subset in all
+# representations x queries (hansard_llm/embedder_grid.py, local ST backend).
 #
 #   sbatch cluster/embed_grid.sbatch
 

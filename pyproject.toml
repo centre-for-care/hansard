@@ -24,7 +24,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest~=9.0"]
 # Local embedding inference for the embedder grid (cluster or workstation).
-embed = ["sentence-transformers~=5.0", "torch"]
+# <5.6: 5.6 imports torchcodec, which needs FFmpeg >=6.1 (BMRC has 6.0).
+embed = ["sentence-transformers>=5.0,<5.6", "torch"]
 
 [tool.setuptools]
 packages = ["hansard_llm", "hansard_llm.docs"]

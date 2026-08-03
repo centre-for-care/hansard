@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,6 +109,10 @@ from .sample import EVAL_SAMPLE_PATH, load_eval_sample  # noqa: E402  (canonical
 # while still bounding pathological rows.
 MAX_EMBED_CHARS = 100_000
 
+# Full-corpus size, used only for the printed embed-time extrapolation
+# (deciding whether the winning embedder is affordable on everything).
+_CORPUS_N = 9_196_605
+
 
 def grid_queries() -> dict[str, str]:
     q = {qid: config.HSC_DEFINITIONS[qid].description
@@ -171,8 +176,9 @@ def score_model(
     *,
     representations: tuple[str, ...] = REPRESENTATIONS,
     verbose: bool = True,
-) -> pd.DataFrame:
-    """Long scores: speech_id x query_id x representation for one embedder.
+) -> tuple[pd.DataFrame, dict]:
+    """Long scores: speech_id x query_id x representation for one embedder,
+    plus wall-clock timings (for extrapolating full-corpus embedding cost).
 
     Documents are embedded once per representation (queries are one vector
     each), so adding queries is free — the whole query axis rides on a single
@@ -188,6 +194,7 @@ def score_model(
     texts = [(t or "")[:MAX_EMBED_CHARS] for t in speeches["speech_text"]]
     sids = list(speeches["speech_id"])
 
+    timings: dict = {"n_docs": len(texts)}
     rows: list[dict] = []
 
     def emit(rep: str, sims: np.ndarray) -> None:
@@ -200,7 +207,9 @@ def score_model(
     if "whole" in representations:
         if verbose:
             print(f"[{spec.model_id}] embedding {len(texts)} whole docs…")
+        t0 = time.perf_counter()
         D = be.embed([doc_tpl.format(text=t) for t in texts], verbose=verbose)
+        timings["embed_whole_s"] = round(time.perf_counter() - t0, 2)
         emit("whole", D @ Q.T)
 
     need_chunks = {"maxchunk", "meanchunk"} & set(representations)
@@ -213,7 +222,10 @@ def score_model(
             start += len(cl)
         if verbose:
             print(f"[{spec.model_id}] embedding {len(flat)} chunks…")
+        timings["n_chunks"] = len(flat)
+        t0 = time.perf_counter()
         C = be.embed(flat, verbose=verbose)
+        timings["embed_chunks_s"] = round(time.perf_counter() - t0, 2)
         sims_all = C @ Q.T
         for rep, reduce_fn in (("maxchunk", np.max), ("meanchunk", np.mean)):
             if rep not in representations:
@@ -229,14 +241,21 @@ def score_model(
     out["family"] = spec.family
     out["params_m"] = spec.params_m
     out["backend"] = backend_name
-    return out
+    return out, timings
 
 
 def run_model(model_id: str, backend: str, *, verbose: bool = True) -> Path:
     """Score one embedder over the eval subset; write scores + manifest."""
     spec = EMBEDDERS_BY_ID[model_id]
     speeches = load_eval_sample()
-    scores = score_model(spec, backend, speeches, verbose=verbose)
+    scores, timings = score_model(spec, backend, speeches, verbose=verbose)
+
+    try:  # record which GPU produced the timings — they don't transfer
+        import torch
+        if torch.cuda.is_available():
+            timings["gpu"] = torch.cuda.get_device_name(0)
+    except Exception:
+        pass
 
     run_id = provenance.new_run_id()
     out_dir = provenance.run_dir("embedder_grid", run_id)
@@ -260,9 +279,16 @@ def run_model(model_id: str, backend: str, *, verbose: bool = True) -> Path:
         "n_speeches": int(speeches["speech_id"].nunique()),
         "max_embed_chars": MAX_EMBED_CHARS,
         "n_rows": len(scores),
+        "timings": timings,
     })
     if verbose:
         print(f"wrote {len(scores)} score rows -> {scores_path}")
+        if timings.get("embed_whole_s"):
+            rate = timings["n_docs"] / timings["embed_whole_s"]
+            est_h = _CORPUS_N / rate / 3600
+            print(f"whole-doc throughput: {rate:.1f} docs/s "
+                  f"({timings.get('gpu', backend)}) -> full corpus "
+                  f"({_CORPUS_N:,}) ~= {est_h:.1f} GPU-hours")
     return scores_path
 
 

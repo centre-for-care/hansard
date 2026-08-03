@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Read-only discovery — slimmed to what the BMRC docs + walkthrough did NOT
-# already establish (partitions/limits/accounts are documented; compute nodes
-# have no internet). Remaining unknowns: /well quota headroom, GPU queue
-# occupancy right now, python module + tooling on the login node. Run on a
-# login node (cluster1-4.bmrc.ox.ac.uk):
+# Read-only discovery of what BMRC docs don't state: /well quota headroom,
+# live GPU queue occupancy, python module + tooling on the login node.
 #   bash cluster/00_discovery.sh 2>&1 | tee discovery.txt
 
 set -uo pipefail
