@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=embed-grid
-#SBATCH --account=mills.prj
-#SBATCH --partition=gpu_a100_40gb,gpu_rtx8000_48gb  # embedders <=8B fit 40GB
+#SBATCH --account=gpu_mills.prj
+#SBATCH --partition=gpu_a100_80gb  # embedders <=8B fit 40GB
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=08:00:00
 #SBATCH --array=0-7                # one task per embedder (see MODELS below)
 #SBATCH --output=logs/%x-%A_%a.out
 
