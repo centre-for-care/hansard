@@ -88,10 +88,12 @@ def query_texts() -> dict[str, str]:
 # Text helpers
 # --------------------------------------------------------------------------
 def _content_hash(text: str) -> str:
+    """Short (12-hex) SHA-1 of the text, used in cache keys."""
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
 def truncate_speech(text: str | None, n: int = run.MAX_SPEECH_CHARS) -> str:
+    """Truncate speech text to ``n`` chars, treating None as empty."""
     return (text or "")[:n]
 
 
@@ -129,6 +131,7 @@ def split_chunks(text: str) -> list[str]:
 # Embedding clients / caches
 # --------------------------------------------------------------------------
 def _embed_client() -> OpenAI:
+    """Return an OpenAI-compatible client for the embedding endpoint."""
     return make_client()
 
 
@@ -142,6 +145,7 @@ class SpeechEmbeddingCache:
     """Disk-backed whole-speech embedding cache keyed by speech_id|content_hash."""
 
     def __init__(self) -> None:
+        """Load any existing cache from disk."""
         self._keys: list[str] = []
         self._index: dict[str, int] = {}
         self._mat: np.ndarray | None = None
@@ -149,18 +153,21 @@ class SpeechEmbeddingCache:
         self._load()
 
     def _load(self) -> None:
+        """Load matrix and keys from disk if present."""
         if _WHOLE_VECS.exists() and _WHOLE_KEYS.exists():
             self._mat = np.load(_WHOLE_VECS)
             self._keys = json.loads(_WHOLE_KEYS.read_text(encoding="utf-8"))
             self._index = {k: i for i, k in enumerate(self._keys)}
 
     def _save(self) -> None:
+        """Write matrix and keys to disk."""
         config.ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
         np.save(_WHOLE_VECS, self._mat)
         _WHOLE_KEYS.write_text(json.dumps(self._keys), encoding="utf-8")
 
     @staticmethod
     def key(speech_id, text: str) -> str:
+        """Cache key: ``speech_id|content_hash|whole``."""
         return f"{speech_id}|{_content_hash(text)}|whole"
 
     def ensure(self, items: list[tuple[object, str]]) -> None:
@@ -189,6 +196,7 @@ class SpeechEmbeddingCache:
             self._save()
 
     def matrix(self, items: list[tuple[object, str]]) -> np.ndarray:
+        """Return embeddings row-aligned with ``items``, embedding any missing."""
         self.ensure(items)
         idx = [self._index[self.key(sid, text)] for sid, text in items]
         return self._mat[idx]
@@ -206,6 +214,7 @@ class ChunkEmbeddingCache:
     """
 
     def __init__(self) -> None:
+        """Open the consolidated store if present; prepare the overflow dir."""
         _CHUNK_DIR.mkdir(parents=True, exist_ok=True)
         self._client: OpenAI | None = None
         self._mem: dict[str, np.ndarray] = {}
@@ -218,14 +227,17 @@ class ChunkEmbeddingCache:
 
     @staticmethod
     def key(speech_id, text: str) -> str:
+        """Cache key: ``speech_id|content_hash``."""
         return f"{speech_id}|{_content_hash(text)}"
 
     def _path(self, key: str) -> Path:
+        """Per-speech overflow .npy path for a cache key."""
         # filesystem-safe
         safe = key.replace("|", "_")
         return _CHUNK_DIR / f"{safe}.npy"
 
     def get(self, speech_id, text: str) -> np.ndarray | None:
+        """Return the (chunks, d) matrix for a speech, or None if not cached."""
         k = self.key(speech_id, text)
         if k in self._mem:
             return self._mem[k]
@@ -242,6 +254,7 @@ class ChunkEmbeddingCache:
         return None
 
     def ensure(self, items: list[tuple[object, str]]) -> None:
+        """Chunk, embed, and cache any speeches not already stored."""
         todo: list[tuple[str, object, str, list[str]]] = []
         for sid, text in items:
             k = self.key(sid, text)
@@ -277,27 +290,32 @@ class QueryEmbeddingCache:
     """
 
     def __init__(self) -> None:
+        """Load any existing cache from disk."""
         self._keys: list[str] = []
         self._index: dict[str, int] = {}
         self._mat: np.ndarray | None = None
         self._load()
 
     def _load(self) -> None:
+        """Load matrix and keys from disk if present."""
         if _QUERY_VECS.exists() and _QUERY_KEYS.exists():
             self._mat = np.load(_QUERY_VECS)
             self._keys = json.loads(_QUERY_KEYS.read_text(encoding="utf-8"))
             self._index = {k: i for i, k in enumerate(self._keys)}
 
     def _save(self) -> None:
+        """Write matrix and keys to disk."""
         config.ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
         np.save(_QUERY_VECS, self._mat)
         _QUERY_KEYS.write_text(json.dumps(self._keys), encoding="utf-8")
 
     @staticmethod
     def key(query_id: str, text: str) -> str:
+        """Cache key: ``query_id|content_hash``."""
         return f"{query_id}|{_content_hash(text)}"
 
     def ensure(self, queries: dict[str, str]) -> None:
+        """Embed and persist any queries not already cached."""
         missing = [(qid, text) for qid, text in queries.items()
                    if self.key(qid, text) not in self._index]
         if not missing:
@@ -311,9 +329,11 @@ class QueryEmbeddingCache:
         self._save()
 
     def vector(self, query_id: str, text: str) -> np.ndarray:
+        """Return the cached embedding for one query."""
         return self._mat[self._index[self.key(query_id, text)]]
 
     def matrix(self, queries: dict[str, str]) -> np.ndarray:
+        """Stack query vectors, in dict order, into a (Q, d) matrix."""
         return np.vstack([self.vector(qid, text)
                           for qid, text in queries.items()])
 
@@ -386,6 +406,7 @@ def draw_filter_pool(
 
 
 def load_filter_pool() -> pd.DataFrame:
+    """Load the persisted filter pool; raise if --embed has not run yet."""
     if not FILTER_POOL_PATH.exists():
         raise FileNotFoundError(
             f"No filter pool at {FILTER_POOL_PATH}. Run with --embed first."
@@ -495,6 +516,7 @@ def score_pool(
 # Metrics
 # --------------------------------------------------------------------------
 def _precision_at_k(y_true: np.ndarray, scores: np.ndarray, k: int) -> float:
+    """Precision among the top-k scored items (NaN on empty input)."""
     if len(y_true) == 0:
         return float("nan")
     k = min(k, len(y_true))
@@ -503,6 +525,7 @@ def _precision_at_k(y_true: np.ndarray, scores: np.ndarray, k: int) -> float:
 
 
 def _recall_at_k(y_true: np.ndarray, scores: np.ndarray, k: int) -> float:
+    """Share of all positives found in the top-k (NaN if no positives)."""
     total = y_true.sum()
     if total == 0:
         return float("nan")
@@ -676,6 +699,7 @@ def run_spotcheck(
 
 
 def summarize_spotcheck(spot_meta: pd.DataFrame) -> list[dict]:
+    """Per-band LLM positive rates vs mean retrieval score for the spot-check."""
     # Spot-check rows live in the legacy log (pre-provenance runs) and/or the
     # versioned retrieval_spotcheck experiment; read both.
     frames = [run.load_legacy()]
@@ -713,6 +737,7 @@ def summarize_spotcheck(spot_meta: pd.DataFrame) -> list[dict]:
 # Summary markdown
 # --------------------------------------------------------------------------
 def write_summary(metrics: dict, spot: list[dict] | None = None) -> None:
+    """Render metrics (and optional spot-check bands) to docs/retrieval_summary.md."""
     lines = [
         "# Semantic retrieval experiment — summary",
         "",
@@ -837,6 +862,7 @@ def write_summary(metrics: dict, spot: list[dict] | None = None) -> None:
 # Pipeline steps
 # --------------------------------------------------------------------------
 def embed_and_score(*, modes: tuple[str, ...] = ("whole", "maxchunk")) -> pd.DataFrame:
+    """Embed and score pilot + filter pools; write and return combined long scores."""
     pilot = sample.load_sample()
     exclude = set(pilot["speech_id"])
     if FILTER_POOL_PATH.exists():
@@ -872,6 +898,7 @@ def embed_and_score(*, modes: tuple[str, ...] = ("whole", "maxchunk")) -> pd.Dat
 
 
 def evaluate_all(scores: pd.DataFrame | None = None) -> dict:
+    """Pilot ranking metrics + filter-pool seed summary; writes the metrics JSON."""
     if scores is None:
         scores = pd.read_parquet(SCORES_PATH)
     gold = pilot_majority_gold()
@@ -893,6 +920,7 @@ def evaluate_all(scores: pd.DataFrame | None = None) -> dict:
 
 
 def spotcheck_all(*, max_workers: int = 16) -> list[dict]:
+    """Select spot-check bands, run the LLM labeling, and return the band summary."""
     scores = pd.read_parquet(SCORES_PATH)
     filt_scores = scores[scores["pool"] == "filter"]
     spot_meta = select_spotcheck_ids(filt_scores)
@@ -914,6 +942,7 @@ def spotcheck_all(*, max_workers: int = 16) -> list[dict]:
 # CLI
 # --------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: --embed / --evaluate / --spotcheck stages."""
     ap = argparse.ArgumentParser(description="Definition-as-query retrieval experiment")
     ap.add_argument("--embed", action="store_true",
                     help="draw filter pool (if needed), embed, and score both pools")

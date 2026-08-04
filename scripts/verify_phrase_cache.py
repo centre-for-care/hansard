@@ -25,6 +25,8 @@ from hansard_llm.embed import EmbeddingCache, embed_texts, make_client  # noqa: 
 
 
 def main() -> None:
+    """Re-embed a random sample of cached phrases and compare cosine
+    similarity against the cache, exiting non-zero on mismatches."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--seed", type=int, default=0)

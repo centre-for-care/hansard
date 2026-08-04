@@ -1,75 +1,57 @@
 # hansard
-A repo for scraping and analysing Hansard data!
 
-This project provides end-to-end, reproducible pipelines to:
+Scraping and analysing UK parliamentary debates (Hansard), 1803–present.
 
-- **Scrape Hansard debate transcripts** — Historical (1803–2005) and Modern (2005–present)
-- **Assemble speaker metadata** — Wikipedia/Wikidata with GPT-assisted verification and open-web fallbacks
-- Export tidy **CSV/JSON** tables for analysis
+The repo has two eras of work:
 
----
+1. **Data acquisition** (`scrapers/`) — scrape debate transcripts and assemble
+   speaker metadata (Wikipedia/Wikidata with GPT-assisted verification).
+2. **LLM analysis pilot** (`hansard_llm/`) — a robustness-aware LLM
+   topic-extraction pipeline over the scraped corpus, plus the cluster
+   infrastructure to run it at scale.
 
-## Table of contents
-- [hansard](#hansard)
-  - [Table of contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Project structure](#project-structure)
-    - [1) Hansard transcripts (web scrapers)](#1-hansard-transcripts-web-scrapers)
-    - [2) Speaker metadata (Wikipedia/Wikidata + GPT)](#2-speaker-metadata-wikipediawikidata--gpt)
+Data and run artifacts live **outside this repo** in a sibling checkout
+(`../hansard_eda` by default; override with `HANSARD_LLM_DATA_DIR` /
+`HANSARD_LLM_ARTIFACTS_DIR`). Path resolution is centralised in
+[hansard_llm/config.py](hansard_llm/config.py).
 
----
+## Repo map
 
-## Overview
+| Directory | What it is | Details |
+|---|---|---|
+| [hansard_llm/](hansard_llm/) | The main Python package: stratified sampling, prompt-grid LLM extraction, embedding retrieval, robustness metrics, report builders (`docs/`). | [hansard_llm/README.md](hansard_llm/README.md) |
+| [cluster/](cluster/) | SLURM scripts for the Oxford BMRC cluster: env setup, model downloads, sbatch jobs for the embedder grid and vLLM-served LLM grid. | [cluster/README.md](cluster/README.md) |
+| [scrapers/](scrapers/) | Standalone CLI scripts that built the corpus and speaker metadata. Numbered by execution order; run rarely (re-scrapes only). | below |
+| [scripts/](scripts/) | One-off verification/maintenance scripts (migration checks, cache verification). | docstrings in each |
+| [tests/](tests/) | Pytest suite guarding past bugs: output parsing, results-store cache keys, era binning. Run `python -m pytest tests/ -q`. | |
 
-The repo has two complementary domains:
+Install: `pip install -e .` (deps pinned in [pyproject.toml](pyproject.toml);
+duckdb is hard-pinned because sample reproducibility depends on its version).
 
-1) **Hansard transcripts (scrapers)**  
-   Crawl the Hansard calendar, collect section hierarchies, and extract debate text.
+## Scrapers
 
-2) **Speaker metadata (Wikipedia/Wikidata + GPT)**  
-   Build queries, fetch candidate pages, verify identity with GPT, extract a structured biography JSON, then fall back to Wikidata or open web when needed.
+Filenames are numbered (`NN_`) by execution order within each pipeline. All
+are standalone `argparse` CLIs.
 
-Both domains are implemented for **Historical (1803–2005)** and **Modern (2005–present)** periods.
+### Transcripts — [scrapers/hansard/](scrapers/hansard/)
 
----
+- `scraper_historical_hansard_01_calendar_index.py` — index sittings (1803–2005) → chambers/sections.
+- `scraper_historical_hansard_02_enrich_sections.py` — enrich each section with full text, year-by-year with checkpoints.
+- `scraper_historical_hansard_03_collect_speaker_metadata.py` — crawl Hansard speaker index pages.
+- `scraper_modern_hansard_01_scrape_debates.py` — modern Hansard: calendar → section URLs → hierarchical debate tree.
 
-## Project structure
+### Speaker metadata — [scrapers/historical/](scrapers/historical/) (1803–2005) and [scrapers/modern/](scrapers/modern/) (2005–present)
 
-> Filenames are numbered (`NN_`) to reflect execution order within each pipeline.
+Parallel pipelines with the same shape: collect candidate Wikipedia pages,
+verify identity with GPT, extract a structured biography JSON, then fall back
+to Wikidata and finally the open web (fallback-sourced entries are flagged).
 
-### 1) Hansard transcripts (web scrapers)
-
-**Historical (HTML scraping)**
-- `historical_hansard_01_calendar_index.py`  
-  Index sittings (1803–2005) → chambers/sections → `historical_step1.json`.
-- `historical_hansard_02_enrich_sections.py`  
-  Enrich each section with full text (speeches & procedural), year-by-year with checkpoints.
-
-**Modern (HTML scraping + API seed)**
-- `modern_hansard_00_fetch_members_api.py`  
-  Retrieve modern members metadata from the UK Parliament Members API (seed list).
-- `modern_hansard_01_scrape_debates.py`  
-  Scrape modern Hansard: calendar → section URLs → hierarchical debate tree.
-
-**Historical speaker index (Hansard “People”)**
-- `historical_speakers_00_collect_index.py`  
-  Crawl Hansard speaker index pages → `speaker_details.json`.
-
-### 2) Speaker metadata (Wikipedia/Wikidata + GPT)
-
-**Historical (1803–2005)**
-- `historical_01_hansard_wikipedia_collector_full.py` — Build Google queries per speaker; collect candidate Wikipedia URLs; download article text.
-- `historical_02_verify_wikipedia_pages.py` — GPT identity check (`yes`/`no`/`uncertain`).
-- `historical_03_extract_bio_json.py` — GPT extraction of structured biography JSON from verified pages.
-- `historical_04_fallback_search_fetch.py` — If missing, GPT search **restricted to Wikipedia + Wikidata**, record URLs and fetch text.
-- `historical_05_openweb_fallback.py` — Final open-web fallback (Britannica, gov.uk, reputable press/archives); extracted entries are **flagged** as open-web sourced.
-- `historical_99_no_url_pipeline.py` — Utilities and edge-case handling for historical speakers **without** Wikipedia URLs.
-- `infer_speaker_gender.py` — Gender inference for historical speakers (titles → heuristics → `gender_guesser` → manual overrides).
-
-**Modern (2005–present)**
-- `modern_01_hansard_wikipedia_collector.py` — Build queries; collect **top-2** Wikipedia URLs per member.
-- `modern_02_download_wiki_texts.py` — Download article content for candidates.
-- `modern_03_verify_pages.py` — GPT identity check against Parliament API metadata.
-- `modern_04_extract_bio_json.py` — GPT extraction of structured biography JSON.
-- `modern_05_fallback_search_fetch.py` — Wikipedia/Wikidata-only fallback search + fetch.
-- `modern_06_openweb_fallback.py` — Final open-web fallback and flagging.
+| Step | Historical | Modern |
+|---|---|---|
+| Seed / gender | `historical_00_infer_speaker_gender.py` | `modern_00_fetch_members_api.py` (Parliament Members API) |
+| Collect Wikipedia candidates | `historical_01_wiki_collect_and_download.py` | `modern_01_collect_wikipedia_links.py` + `modern_02_download_wiki_texts.py` |
+| GPT identity check | `historical_02_verify_wikipedia_pages.py` | `modern_03_verify_pages.py` |
+| GPT bio extraction | `historical_03_extract_bio_json.py` | `modern_04_extract_bio_json.py` |
+| Wikipedia/Wikidata fallback | `historical_04_fallback_search_fetch.py` | `modern_05_fallback_search_fetch.py` |
+| Open-web fallback | `historical_05_openweb_fallback.py` | `modern_06_openweb_fallback.py` |
+| No-URL edge cases | `historical_99_no_url_pipeline.py` | — |

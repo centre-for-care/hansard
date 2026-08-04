@@ -2,3 +2,6 @@
 # cluster when files are checked out on Windows and copied over.
 *.sh text eol=lf
 *.sbatch text eol=lf
+
+# Python stays LF too — stops CRLF churn on Windows checkouts.
+*.py text eol=lf

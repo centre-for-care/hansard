@@ -40,6 +40,8 @@ ERAS = ERA_LABELS
 
 
 def main() -> None:
+    """Plot presence rate by era for each definition and write the PNG,
+    printing the pivot table and per-definition era gradients."""
     # pool == "pilot": the legacy log also carries retrieval spot-check rows
     # under the same grid labels; those speeches are not in the pilot sample
     # (no year lookup) and belong to a different population.

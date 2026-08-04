@@ -52,7 +52,7 @@ class EmbedderSpec:
     """One embedding model and how to talk to it.
 
     ``query_template`` wraps the query text in the model's trained query
-    format (document side is embedded bare for all of these models);
+    format (documents are bare except the ``_DOC_TEMPLATE`` models);
     ``max_tokens`` is the usable context — text beyond it is what the model
     physically cannot read, so "whole" representation means "first
     max_tokens" for short-context models and we record that.
@@ -69,10 +69,11 @@ class EmbedderSpec:
         return self.query_template.format(text=text)
 
 
+# Qwen3-Embedding's trained query scaffold (model card): instruction + query;
+# documents are embedded bare. Held identical across sizes so the size axis
+# is not confounded by prompt wording.
 _QWEN_Q = ("Instruct: Given a topic definition, retrieve parliamentary "
            "speeches that substantively discuss the topic\nQuery: {text}")
-_E5_Q = ("Instruct: Given a topic definition, retrieve parliamentary "
-         "speeches that substantively discuss the topic\nQuery: {text}")
 
 EMBEDDERS: tuple[EmbedderSpec, ...] = (
     # -- size axis (one family, one training recipe) --
@@ -93,8 +94,11 @@ EMBEDDERS: tuple[EmbedderSpec, ...] = (
 )
 EMBEDDERS_BY_ID = {e.model_id: e for e in EMBEDDERS}
 
-# nomic documents need a prefix too (asymmetric scheme is doc+query prefixes).
-_DOC_TEMPLATE = {"nomic-ai/nomic-embed-text-v1.5": "search_document: {text}"}
+# Models whose trained scheme also prefixes documents (all others embed bare).
+_DOC_TEMPLATE = {
+    "nomic-ai/nomic-embed-text-v1.5": "search_document: {text}",
+    "intfloat/e5-large-v2": "passage: {text}",
+}
 
 # The retained query axis (user decision) + free diagnostic baseline.
 QUERY_IDS: tuple[str, ...] = ("expert_hc_sc", "expert_sc_hc", "era_neutral",

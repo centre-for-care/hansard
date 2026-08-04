@@ -32,6 +32,7 @@ FORMATS = ("json", "free")
 
 
 def _cell(row) -> dict:
+    """Reduce one log row to the per-cell payload: presence, sub-topics, quote."""
     subs = row["subthemes"]
     return {
         "present": bool(row["mentions_topic"]) if row["mentions_topic"] is not None else None,
@@ -41,6 +42,9 @@ def _cell(row) -> dict:
 
 
 def build_data() -> list[dict]:
+    """Return one record per pilot speech with capped/uncapped cells per
+    format and model, plus per-speech cap-effect summaries, sorted by
+    cap effect (largest first)."""
     df = run.load_legacy()
     # The definition filter matters: the definition-sensitivity arm also runs at
     # role=none / v1_nocap / both formats, so without it those cells would be
@@ -252,6 +256,7 @@ rebuildPicker();
 
 
 def main():
+    """Embed the data into the HTML template and write cap_explorer.html."""
     data = build_data()
     models = [{"id": m, "label": MODEL_LABELS[m]} for m in MODEL_ORDER]
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")

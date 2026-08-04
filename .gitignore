@@ -187,3 +187,6 @@ hansard_llm/docs/*.html
 # Cluster job logs
 cluster/logs/
 logs/
+
+# Claude Code config, skills, and audit reports (kept local)
+.claude/

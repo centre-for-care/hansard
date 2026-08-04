@@ -53,6 +53,7 @@ PRESETS = (
 
 
 def _cell(row) -> dict:
+    """Reduce one log row to the per-cell payload: presence, sub-topics, quote."""
     subs = row["subthemes"]
     present = row["mentions_topic"]
     return {
@@ -63,6 +64,9 @@ def _cell(row) -> dict:
 
 
 def build_data() -> list[dict]:
+    """Return one record per pilot speech with a cell for every
+    format x model x definition, plus per-definition presence rates and the
+    worst within-definition model split (0 = unanimous, 1 = even 50/50)."""
     df = run.load_legacy()
     # Matched on the shipping default so the only thing differing across arms
     # is the definition text. pool == "pilot" drops the retrieval spot-check
@@ -430,6 +434,9 @@ rebuild();
 
 
 def main():
+    """Embed data, models and definition texts into the HTML template, write
+    definition_review.html, and print the contested speeches under the
+    default (expert-order) preset."""
     data = build_data()
     models = [{"id": m, "label": MODEL_LABELS[m]} for m in MODEL_ORDER]
     meta = {

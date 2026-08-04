@@ -24,6 +24,9 @@ from hansard_llm import retrieve  # noqa: E402
 
 
 def main() -> None:
+    """Merge existing store + per-speech files, write the consolidated pair
+    atomically, verify a sample round-trips, then delete the per-speech
+    files (unless --keep-files)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep-files", action="store_true",
                     help="do not delete per-speech files after verification")
@@ -35,6 +38,7 @@ def main() -> None:
     pos = 0
 
     def add(key: str, arr: np.ndarray) -> None:
+        """Append one speech's chunk block and record its (start, end) span."""
         nonlocal pos
         keys.append(key)
         spans.append((pos, pos + len(arr)))

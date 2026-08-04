@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=vllm-serve
-#SBATCH --account=mills.prj
+#SBATCH --account=gpu_mills.prj
 #SBATCH --partition=gpu_a100_80gb  # gpu_gh200_144gb once it's up (down 2026-08)
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=12

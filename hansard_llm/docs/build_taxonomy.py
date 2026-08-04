@@ -38,6 +38,8 @@ ARM = dict(definition="expert_hc_sc", task="v1_nocap",
 
 
 def main() -> None:
+    """Cluster the taxonomy arm's sub-theme phrases (agglomerative, cosine)
+    and write taxonomy_clusters.csv plus a provenance manifest."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     ap.add_argument("--min-cluster", type=int, default=2)

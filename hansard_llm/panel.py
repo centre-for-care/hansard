@@ -51,6 +51,7 @@ DET_CONDITION = run.Condition(temperature=0.0, seed=42,
 
 
 def _eval_speeches(n: int | None = None) -> pd.DataFrame:
+    """Eval-subset speeches; if ``n`` is set, a deterministic decade-stratified head."""
     df = sample.load_eval_sample()
     if n is not None:
         # deterministic stratified head: sort by (decade, speech_id) then take
@@ -63,6 +64,7 @@ def _eval_speeches(n: int | None = None) -> pd.DataFrame:
 
 
 def _variants():
+    """Prompt variants: the panel definitions under role=none / JSON / uncapped."""
     topics = [config.HSC_DEFINITIONS[d] for d in config.PANEL_DEFINITIONS]
     return build_definition_variants(
         topics, roles=("none",), formats=("json",), task=TASK_UNCAPPED)
@@ -70,6 +72,7 @@ def _variants():
 
 def panel_plan(model: ModelSpec, *, extended: bool = False,
                max_workers: int = 32) -> run.RunPlan:
+    """RunPlan for one model on the full eval subset (or the 2k extended slice)."""
     return run.RunPlan(
         speeches=_eval_speeches(EXTENDED_N if extended else None),
         topic=config.DEFAULT_TOPIC,
@@ -82,6 +85,7 @@ def panel_plan(model: ModelSpec, *, extended: bool = False,
 
 
 def determinism_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
+    """RunPlan for the temp-0 repeat rider (one definition, DETERMINISM_N speeches)."""
     return run.RunPlan(
         speeches=_eval_speeches(DETERMINISM_N),
         topic=config.DEFAULT_TOPIC,
@@ -97,6 +101,7 @@ def determinism_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
 # Gold with leave-one-out discipline
 # --------------------------------------------------------------------------
 def load_panel(*, include_extended: bool = False) -> pd.DataFrame:
+    """Load the panel run, optionally concatenating the extended run if it exists."""
     frames = [run.load_experiment(EXPERIMENT)]
     if include_extended:
         try:
@@ -185,6 +190,7 @@ def determinism_report(df: pd.DataFrame | None = None) -> pd.DataFrame:
 # CLI
 # --------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: run panel / extended / determinism for one model, or --report."""
     ap = argparse.ArgumentParser(description="Unified LLM panel")
     ap.add_argument("--model", help="model_id from config (panel or extended)")
     ap.add_argument("--extended", action="store_true",

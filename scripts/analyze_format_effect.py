@@ -26,6 +26,8 @@ from hansard_llm import run  # noqa: E402
 
 
 def rate(df, num_mask=None) -> tuple[int, int, float]:
+    """Return (n_positive, n_parsed, share) over parse-ok rows; positives are
+    mentions_topic unless num_mask picks them explicitly."""
     ok = df[df["parse_ok"]]
     pos = ok if num_mask is None else ok[num_mask.reindex(ok.index, fill_value=False)]
     n_pos = int(pos["mentions_topic"].fillna(False).astype(bool).sum()
@@ -34,6 +36,8 @@ def rate(df, num_mask=None) -> tuple[int, int, float]:
 
 
 def main() -> None:
+    """Print the per-format presence table and the free-json gap decomposed
+    into raw, model-stated, and parser-fallback components."""
     df = run.load_legacy()
     core = df[(df["pool"] == "pilot") & (df["condition"] == "temp0")
               & (df["definition"] == "current")
