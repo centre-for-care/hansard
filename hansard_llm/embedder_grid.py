@@ -10,8 +10,11 @@ Grid axes
                   BGE base/large (second size pair), GTE-large, E5-large-v2,
                   Nomic v1.5 (family axis). All English. Qwen3-8B is the
                   anchor (the shipping pilot model).
-* representation  whole | maxchunk | meanchunk (meanchunk is the length-bias
-                  control: max-over-chunks mechanically rewards longer texts).
+* representation  whole | maxchunk | meanchunk. Chunk arms use overlapping
+                  sentence windows from ``retrieve.split_chunks`` (max/overlap
+                  recorded in the run manifest); maxchunk is the length-bias
+                  arm (max-over-chunks mechanically rewards longer texts),
+                  meanchunk the length-bias control.
 * query           4 retained definitions (expert_hc_sc, expert_sc_hc,
                   era_neutral, current) + name_only as a free diagnostic.
 
@@ -42,7 +45,7 @@ import numpy as np
 import pandas as pd
 
 from . import config, provenance
-from .retrieve import split_chunks
+from .retrieve import _CHUNK_MAX, _CHUNK_OVERLAP, _CHUNK_SCHEME, split_chunks
 
 # --------------------------------------------------------------------------
 # Model registry
@@ -186,7 +189,8 @@ def score_model(
 
     Documents are embedded once per representation (queries are one vector
     each), so adding queries is free — the whole query axis rides on a single
-    document pass.
+    document pass. Chunk arms call ``split_chunks`` (overlapping windows;
+    scheme ``ch{max}o{overlap}``).
     """
     be = make_backend(spec, backend_name)
     queries = grid_queries()
@@ -198,7 +202,12 @@ def score_model(
     texts = [(t or "")[:MAX_EMBED_CHARS] for t in speeches["speech_text"]]
     sids = list(speeches["speech_id"])
 
-    timings: dict = {"n_docs": len(texts)}
+    timings: dict = {
+        "n_docs": len(texts),
+        "chunk_scheme": _CHUNK_SCHEME,
+        "chunk_max_chars": _CHUNK_MAX,
+        "chunk_overlap_chars": _CHUNK_OVERLAP,
+    }
     rows: list[dict] = []
 
     def emit(rep: str, sims: np.ndarray) -> None:
@@ -278,6 +287,9 @@ def run_model(model_id: str, backend: str, *, verbose: bool = True) -> Path:
         "doc_template": _DOC_TEMPLATE.get(model_id, "{text}"),
         "embed_backend": backend,
         "representations": list(REPRESENTATIONS),
+        "chunk_max_chars": _CHUNK_MAX,
+        "chunk_overlap_chars": _CHUNK_OVERLAP,
+        "chunk_scheme": _CHUNK_SCHEME,
         "queries": grid_queries(),
         "eval_sample": str(EVAL_SAMPLE_PATH),
         "n_speeches": int(speeches["speech_id"].nunique()),
@@ -297,7 +309,12 @@ def run_model(model_id: str, backend: str, *, verbose: bool = True) -> Path:
 
 
 def load_all_scores() -> pd.DataFrame:
-    """Every embedder_grid score file across runs, concatenated."""
+    """Every embedder_grid score file across runs, concatenated.
+
+    Does not filter on chunk scheme — if pre-overlap and post-overlap runs
+    coexist under ``runs/embedder_grid/``, check each run's manifest
+    ``chunk_scheme`` before treating scores as comparable.
+    """
     files = sorted((config.RUNS_DIR / "embedder_grid").glob("*/scores_*.parquet"))
     if not files:
         raise FileNotFoundError("no embedder_grid score files yet")
@@ -339,7 +356,11 @@ def rank_agreement(scores: pd.DataFrame, *, query_id: str = "expert_hc_sc",
 def length_bias(scores: pd.DataFrame, speeches: pd.DataFrame,
                 *, query_id: str = "expert_hc_sc") -> pd.DataFrame:
     """corr(score, log word_count) per model x representation — the maxchunk
-    length-bias diagnostic (pilot: 0.57 maxchunk vs 0.23 whole)."""
+    length-bias diagnostic (pilot: 0.57 maxchunk vs 0.23 whole).
+
+    Overlapping chunks raise n_chunks on long speeches vs the old abutting
+    scheme; compare manifests' ``chunk_scheme`` before pooling runs.
+    """
     wc = speeches.set_index("speech_id")["word_count"]
     sel = scores[scores["query_id"] == query_id].copy()
     sel["log_wc"] = np.log(sel["speech_id"].map(wc).clip(lower=1))

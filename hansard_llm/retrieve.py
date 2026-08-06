@@ -55,9 +55,31 @@ _QUERY_KEYS = config.ARTIFACTS_DIR / "retrieval_query_keys.json"
 _BATCH = 64
 _FILTER_POOL_N = 3000
 _FILTER_SEED = 20260731
-_CHUNK_MIN = 40
 _CHUNK_MAX = 400
-_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+_CHUNK_OVERLAP = 80  # chars carried from the end of one chunk into the next
+# Bump the trailing tag (s2, …) when sentence splitting changes so disk
+# caches and embedder_grid manifests invalidate cleanly.
+_CHUNK_SCHEME = f"ch{_CHUNK_MAX}o{_CHUNK_OVERLAP}s2"
+
+# Sentence end: whitespace after .?! or a newline run. Abbreviations /
+# initials / decimals are masked first — see ``_split_sentences``.
+_SENT_END = re.compile(r"(?<=[.!?])\s+|\n+")
+# Hansard-heavy titles and Latin/editorial abbreviations (half the eval
+# sample contains at least one of Mr./Hon./…).
+_ABBREV = re.compile(
+    r"\b(?:"
+    r"Mr|Mrs|Ms|Miss|Dr|Prof|Rev|Hon|Rt|Gen|Col|Capt|Sgt|Lt|Maj|"
+    r"St|vs|etc|viz|cf|Jr|Sr|Ltd|Co|Inc|Cl|vol|vols|"
+    r"Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec"
+    r")\.",
+    re.IGNORECASE,
+)
+# "No. 3" / "Nos. 3–4" only — bare "no." is a real sentence end in debate.
+_NO_NUM = re.compile(r"\bNos?\.(?=\s*\d)", re.IGNORECASE)
+_DOTTED = re.compile(r"\b(?:e\.g|i\.e|u\.s|u\.k|u\.n|m\.p|p\.m)\.", re.IGNORECASE)
+_INITIAL = re.compile(r"\b[A-Z]\.(?=\s*[A-Z])")  # "T. Sheridan", "A. B."
+_DECIMAL = re.compile(r"(?<=\d)\.(?=\d)")
+_DOT_SENTINEL = "\u2060"  # word-joiner; restored after split
 
 SPOTCHECK_MODELS: tuple[ModelSpec, ...] = tuple(
     m for m in config.CORE_MODELS
@@ -97,33 +119,87 @@ def truncate_speech(text: str | None, n: int = run.MAX_SPEECH_CHARS) -> str:
     return (text or "")[:n]
 
 
+def _hard_windows(s: str, max_len: int, overlap: int) -> list[str]:
+    """Sliding windows over an oversize string; every char appears at least once."""
+    if len(s) <= max_len:
+        return [s]
+    step = max(1, max_len - overlap)
+    out: list[str] = []
+    i = 0
+    while True:
+        out.append(s[i: i + max_len])
+        if i + max_len >= len(s):
+            break
+        i += step
+    return out
+
+
+def _join_units(units: list[str]) -> str:
+    return " ".join(units)
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split on real sentence ends; keep Hansard abbreviations intact.
+
+    Masks ``Mr.`` / ``Hon.`` / initials / decimals / ``e.g.`` so the crude
+    ``_SENT_END`` cut does not fire inside them, then restores the dots.
+    """
+    masked = text
+    for pat in (_ABBREV, _DOTTED, _INITIAL, _NO_NUM):
+        masked = pat.sub(lambda m: m.group(0).replace(".", _DOT_SENTINEL), masked)
+    masked = _DECIMAL.sub(_DOT_SENTINEL, masked)
+    return [
+        p.replace(_DOT_SENTINEL, ".").strip()
+        for p in _SENT_END.split(masked)
+        if p and p.strip()
+    ]
+
+
 def split_chunks(text: str) -> list[str]:
-    """Crude sentence chunks in [_CHUNK_MIN, _CHUNK_MAX] chars."""
-    raw = [s.strip() for s in _SENT_SPLIT.split(text) if s and s.strip()]
-    chunks: list[str] = []
-    buf = ""
+    """Sentence-packed chunks of at most ``_CHUNK_MAX`` chars with overlap.
+
+    Consecutive chunks share about ``_CHUNK_OVERLAP`` characters of trailing /
+    leading content so a topic straddling a boundary is visible to both.
+    Nothing is dropped: every non-empty character of ``text`` appears in at
+    least one chunk (oversized sentences are hard-split with the same overlap).
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    raw = _split_sentences(text)
+    if not raw:
+        return [text]
+
+    units: list[str] = []
     for s in raw:
-        if len(s) > _CHUNK_MAX:
-            if buf:
-                chunks.append(buf)
-                buf = ""
-            # hard-split long sentences
-            for i in range(0, len(s), _CHUNK_MAX):
-                piece = s[i: i + _CHUNK_MAX].strip()
-                if len(piece) >= _CHUNK_MIN:
-                    chunks.append(piece)
-            continue
-        candidate = f"{buf} {s}".strip() if buf else s
-        if len(candidate) <= _CHUNK_MAX:
-            buf = candidate
-        else:
-            if len(buf) >= _CHUNK_MIN:
-                chunks.append(buf)
-            buf = s
-    if buf and len(buf) >= _CHUNK_MIN:
-        chunks.append(buf)
-    if not chunks and text.strip():
-        chunks = [text.strip()[:_CHUNK_MAX]]
+        units.extend(_hard_windows(s, _CHUNK_MAX, _CHUNK_OVERLAP))
+
+    chunks: list[str] = []
+    start = 0
+    n = len(units)
+    while start < n:
+        end = start
+        while end < n:
+            candidate = _join_units(units[start: end + 1])
+            if end > start and len(candidate) > _CHUNK_MAX:
+                break
+            end += 1
+            if len(candidate) >= _CHUNK_MAX:
+                break
+        chunks.append(_join_units(units[start:end]))
+        if end >= n:
+            break
+        # Carry ~_CHUNK_OVERLAP chars into the next chunk; always advance by
+        # ≥1 unit. A single oversized trailing unit is kept in full (overlap
+        # may exceed the target) so the boundary sentence is never orphaned.
+        new_start = end
+        while (new_start > start + 1
+               and len(_join_units(units[new_start:end])) < _CHUNK_OVERLAP):
+            new_start -= 1
+        if new_start == start:
+            new_start = start + 1
+        start = new_start
     return chunks
 
 
@@ -227,8 +303,12 @@ class ChunkEmbeddingCache:
 
     @staticmethod
     def key(speech_id, text: str) -> str:
-        """Cache key: ``speech_id|content_hash``."""
-        return f"{speech_id}|{_content_hash(text)}"
+        """Cache key: ``speech_id|content_hash|chunk-scheme``.
+
+        Scheme suffix (max/overlap) invalidates stale matrices when chunking
+        changes — the hash alone would silently reuse old non-overlap vectors.
+        """
+        return f"{speech_id}|{_content_hash(text)}|{_CHUNK_SCHEME}"
 
     def _path(self, key: str) -> Path:
         """Per-speech overflow .npy path for a cache key."""
