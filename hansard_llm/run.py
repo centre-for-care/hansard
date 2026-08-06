@@ -35,10 +35,6 @@ from .config import ModelSpec, Topic
 from .prompts import (PromptVariant, TASK_UNCAPPED, build_definition_variants,
                       build_uncapped_variants, build_variants)
 
-# Characters of speech text sent to the model. Long speeches are truncated to
-# bound cost/context; the flag is recorded so truncation is auditable.
-MAX_SPEECH_CHARS = 8000
-
 # --- No-cap experiment (see prompts.TASK_UNCAPPED) ---
 # When a variant drops the "at most N sub-topics" instruction we must widen two
 # things that would otherwise silently re-impose the cap: the parse-time cap
@@ -148,7 +144,7 @@ class _Job:
 def _build_jobs(plan: RunPlan, done: set[str]) -> list[_Job]:
     jobs: list[_Job] = []
     for row in plan.speeches.itertuples():
-        text = (row.speech_text or "")[:MAX_SPEECH_CHARS]
+        text = row.speech_text or ""
         for v in plan.variants:
             for m in plan.models:
                 for cond in plan.conditions:
@@ -200,7 +196,7 @@ def _run_one(client: LLMClient, job: _Job, topic: Topic) -> dict:
         "parse_ok": ex.parse_ok,
         "parse_error": ex.parse_error,
         "n_chars_sent": len(job.speech_text),
-        "truncated": len(job.speech_text) >= MAX_SPEECH_CHARS,
+        "truncated": False,
         "prompt_tokens": res.prompt_tokens,
         "completion_tokens": res.completion_tokens,
         "latency_s": res.latency_s,
@@ -220,7 +216,6 @@ def _write_run_manifest(plan: RunPlan, *, experiment: str, run_id: str,
         "run_id": run_id,
         "pool": plan.pool,
         "n_speeches": int(plan.speeches["speech_id"].nunique()),
-        "max_speech_chars": MAX_SPEECH_CHARS,
         "models": [{"model_id": m.model_id, "family": m.family,
                     "tier": m.tier, "reasoning": m.reasoning}
                    for m in plan.models],

@@ -9,8 +9,7 @@ Two pools
 * Filter pool (~3k, era-stratified, not seed-balanced) — score distributions
   and a small LLM spot-check on top / bottom / mid bands.
 
-Document representations: whole-speech (truncated to ``run.MAX_SPEECH_CHARS``)
-and max-over-sentence-chunks (RAG-style).
+Document representations: whole-speech and max-over-sentence-chunks (RAG-style).
 
 Usage::
 
@@ -112,11 +111,6 @@ def query_texts() -> dict[str, str]:
 def _content_hash(text: str) -> str:
     """Short (12-hex) SHA-1 of the text, used in cache keys."""
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
-
-
-def truncate_speech(text: str | None, n: int = run.MAX_SPEECH_CHARS) -> str:
-    """Truncate speech text to ``n`` chars, treating None as empty."""
-    return (text or "")[:n]
 
 
 def _hard_windows(s: str, max_len: int, overlap: int) -> list[str]:
@@ -247,7 +241,7 @@ class SpeechEmbeddingCache:
         return f"{speech_id}|{_content_hash(text)}|whole"
 
     def ensure(self, items: list[tuple[object, str]]) -> None:
-        """``items`` is a list of (speech_id, truncated_text). Saves after
+        """``items`` is a list of (speech_id, text). Saves after
         every slice so an interrupted run keeps its progress on disk."""
         missing_keys: list[str] = []
         missing_texts: list[str] = []
@@ -541,7 +535,7 @@ def score_pool(
     query_cache = query_cache or QueryEmbeddingCache()
 
     items = [
-        (r.speech_id, truncate_speech(r.speech_text))
+        (r.speech_id, r.speech_text or "")
         for r in speeches.itertuples()
     ]
     query_cache.ensure(queries)
