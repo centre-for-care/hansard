@@ -231,9 +231,11 @@ def load_sample() -> pd.DataFrame:
 # --------------------------------------------------------------------------
 # Evaluation subset (embedder grid + LLM panel; Workstream C0)
 # --------------------------------------------------------------------------
-EVAL_SAMPLE_PATH = config.ARTIFACTS_DIR / "eval10k_sample.parquet"
-EVAL_TARGET_N = 10_000
-EVAL_FLOOR_PER_DECADE = 250
+# ~2k is enough for model/definition/embedder sensitivity; a larger draw
+# (e.g. 10k) is only needed for tighter corpus-level rate estimates later.
+EVAL_SAMPLE_PATH = config.ARTIFACTS_DIR / "eval2k_sample.parquet"
+EVAL_TARGET_N = 2_000
+EVAL_FLOOR_PER_DECADE = 50
 EVAL_SEED = 20260802
 
 
@@ -258,9 +260,10 @@ def build_eval_subset(
     eras), this is a random draw within each decade of an unenriched pool, so
     threshold/retention estimates transfer to the real corpus. Allocation is
     proportional to decade size with a floor (early decades are small; the
-    floor keeps their per-decade recall estimates usable), take-all where a
-    decade has fewer than the floor. ``sampling_weight`` = decade population /
-    decade draw, for corpus-level rates.
+    floor keeps their per-decade estimates usable), take-all where a decade
+    has fewer than the floor. ``sampling_weight`` = decade population /
+    decade draw, for corpus-level rates. Realised n is a bit above
+    ``target_n`` because of floors + rounding.
     """
     con = _connect()
     # Same content hygiene as the pilot, minus any seed-regex involvement.
@@ -330,7 +333,7 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser(description="Draw samples.")
     ap.add_argument("--eval-subset", action="store_true",
-                    help="draw the decade-stratified ~10k evaluation subset "
+                    help="draw the decade-stratified ~2k evaluation subset "
                          "(no seed regex) instead of the pilot sample")
     args = ap.parse_args()
 

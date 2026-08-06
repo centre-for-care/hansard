@@ -7,7 +7,7 @@ stochastic temp-0.7 draw. From the same rows we get:
 
 1. **Model sensitivity** — pairwise agreement / alpha across models (one cell
    per model, so raters are independent), size vs family via the extended
-   axis on a 2k subsample.
+   axis on the same ~2k eval set with smaller models.
 2. **Retrieval gold** — majority vote with leave-one-out discipline
    (:func:`panel_gold`): scoring retrieval under definition *d* **must**
    exclude *d*'s cells; evaluating model *m* against gold excludes *m*'s
@@ -36,11 +36,10 @@ from . import config, run, sample
 from .config import ModelSpec
 from .prompts import TASK_UNCAPPED, build_definition_variants
 
-EXPERIMENT = "panel10k"
+EXPERIMENT = "panel2k"
 EXPERIMENT_EXT = "panel_extended2k"
 EXPERIMENT_DET = "panel_determinism"
 
-EXTENDED_N = 2000       # stratified head of the eval subset for the size axis
 DETERMINISM_N = 200     # speeches for the temp-0 repeat check
 DETERMINISM_REPS = 3
 
@@ -50,10 +49,12 @@ DET_CONDITION = run.Condition(temperature=0.0, seed=42,
                               n_reps=DETERMINISM_REPS, label="temp0rep")
 
 # Panel sampling: deterministic core + one stochastic draw (T=0.7, no seed).
-# Single rep keeps the 10k×4-def grid affordable; use run.SELFCONSISTENCY
+# Single rep keeps the 2k×4-def grid affordable; use run.SELFCONSISTENCY
 # (3 reps) if you need a within-cell self-consistency probe.
 STOCHASTIC = run.Condition(temperature=0.7, seed=None, n_reps=1, label="temp07")
 PANEL_CONDITIONS: tuple[run.Condition, ...] = (run.CORE, STOCHASTIC)
+
+POOL = "eval2k"
 
 
 def _eval_speeches(n: int | None = None) -> pd.DataFrame:
@@ -76,17 +77,16 @@ def _variants():
         topics, roles=("none",), formats=("json",), task=TASK_UNCAPPED)
 
 
-def panel_plan(model: ModelSpec, *, extended: bool = False,
-               max_workers: int = 32) -> run.RunPlan:
-    """RunPlan for one model on the full eval subset (or the 2k extended slice)."""
+def panel_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
+    """RunPlan for one model on the full ~2k eval subset."""
     return run.RunPlan(
-        speeches=_eval_speeches(EXTENDED_N if extended else None),
+        speeches=_eval_speeches(),
         topic=config.DEFAULT_TOPIC,
         variants=_variants(),
         models=(model,),
         conditions=PANEL_CONDITIONS,
         max_workers=max_workers,
-        pool="eval10k",
+        pool=POOL,
     )
 
 
@@ -99,7 +99,7 @@ def determinism_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
         models=(model,),
         conditions=(DET_CONDITION,),
         max_workers=max_workers,
-        pool="eval10k",
+        pool=POOL,
     )
 
 
@@ -202,8 +202,8 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Unified LLM panel")
     ap.add_argument("--model", help="model_id from config (panel or extended)")
     ap.add_argument("--extended", action="store_true",
-                    help="run the 2k extended-axis slice instead of the full "
-                         "eval subset")
+                    help="store under panel_extended2k (same eval2k speeches; "
+                         "use for EXTENDED_MODELS size/family axis)")
     ap.add_argument("--determinism", action="store_true",
                     help="run the temp-0 repeat add-on instead of the panel")
     ap.add_argument("--workers", type=int, default=32)
@@ -236,8 +236,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.determinism:
         plan, experiment = determinism_plan(spec, max_workers=args.workers), EXPERIMENT_DET
     elif args.extended:
-        plan, experiment = panel_plan(spec, extended=True,
-                                      max_workers=args.workers), EXPERIMENT_EXT
+        plan, experiment = panel_plan(spec, max_workers=args.workers), EXPERIMENT_EXT
     else:
         plan, experiment = panel_plan(spec, max_workers=args.workers), EXPERIMENT
     n = run.execute(plan, experiment=experiment, cli_args=vars(args))

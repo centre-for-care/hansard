@@ -500,7 +500,7 @@ def pilot_majority_gold(
 ) -> pd.DataFrame:
     """Speech-level majority ``mentions_topic`` under one pilot definition.
 
-    Fallback when panel10k labels are not available yet. Prefer
+    Fallback when panel2k labels are not available yet. Prefer
     :func:`gold_for_query` (panel leave-one-definition-out) for retrieval
     claims once the panel has run.
 

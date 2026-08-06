@@ -72,7 +72,7 @@ class RunPlan:
     self-consistency probe is opt-in and typically run on a subset.
 
     ``pool`` labels which speech population the plan draws from (``pilot``,
-    ``filter_pool``, ``eval10k``, …) and is stamped on every row, so different
+    ``filter_pool``, ``eval2k``, …) and is stamped on every row, so different
     populations can never again be pooled silently under identical labels.
     """
 
