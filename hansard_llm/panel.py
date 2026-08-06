@@ -1,22 +1,22 @@
 """The unified LLM panel (Workstream C2): one run, three uses.
 
 Every panel cell asks the shipping-default extraction question (uncapped, JSON,
-role=none, temp 0) of an eval-subset speech under one of two definitions
-(``config.PANEL_DEFINITIONS``). From the same rows we get:
+role=none) of an eval-subset speech under one of ``config.PANEL_DEFINITIONS``
+(expert orderings, current baseline, name-only), at both temp 0 and a
+stochastic temp-0.7 draw. From the same rows we get:
 
 1. **Model sensitivity** — pairwise agreement / alpha across models (one cell
    per model, so raters are independent), size vs family via the extended
    axis on a 2k subsample.
 2. **Retrieval gold** — majority vote with leave-one-out discipline
-   (:func:`panel_gold`): scoring retrieval under definition *d* excludes *d*'s
-   cells; evaluating model *m* against gold excludes *m*'s cells. Expert-
-   permutation queries are automatically non-circular (the panel never uses
-   expert definitions).
+   (:func:`panel_gold`): scoring retrieval under definition *d* **must**
+   exclude *d*'s cells; evaluating model *m* against gold excludes *m*'s
+   cells. Gold uses ``temp0`` rows only.
 3. **Sub-topic comparison** — the same rows carry themes for cross-model
    taxonomy work.
 
-Riders: a temp-0 repeat condition measures the (claimed, never verified)
-determinism of served models; a Nebius-vs-vLLM parity slice measures
+Optional add-ons: a temp-0 repeat condition measures the (claimed, never
+verified) determinism of served models; a Nebius-vs-vLLM parity slice measures
 serving-stack sensitivity.
 
 Run on the cluster (see cluster/run_grid.sbatch), one model per job::
@@ -49,6 +49,12 @@ DETERMINISM_REPS = 3
 DET_CONDITION = run.Condition(temperature=0.0, seed=42,
                               n_reps=DETERMINISM_REPS, label="temp0rep")
 
+# Panel sampling: deterministic core + one stochastic draw (T=0.7, no seed).
+# Single rep keeps the 10k×4-def grid affordable; use run.SELFCONSISTENCY
+# (3 reps) if you need a within-cell self-consistency probe.
+STOCHASTIC = run.Condition(temperature=0.7, seed=None, n_reps=1, label="temp07")
+PANEL_CONDITIONS: tuple[run.Condition, ...] = (run.CORE, STOCHASTIC)
+
 
 def _eval_speeches(n: int | None = None) -> pd.DataFrame:
     """Eval-subset speeches; if ``n`` is set, a deterministic decade-stratified head."""
@@ -78,18 +84,18 @@ def panel_plan(model: ModelSpec, *, extended: bool = False,
         topic=config.DEFAULT_TOPIC,
         variants=_variants(),
         models=(model,),
-        conditions=(run.CORE,),
+        conditions=PANEL_CONDITIONS,
         max_workers=max_workers,
         pool="eval10k",
     )
 
 
 def determinism_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
-    """RunPlan for the temp-0 repeat rider (one definition, DETERMINISM_N speeches)."""
+    """RunPlan for the temp-0 repeat add-on (one definition, DETERMINISM_N speeches)."""
     return run.RunPlan(
         speeches=_eval_speeches(DETERMINISM_N),
         topic=config.DEFAULT_TOPIC,
-        variants=_variants()[:1],   # one definition suffices for the rider
+        variants=_variants()[:1],   # one definition suffices for this add-on
         models=(model,),
         conditions=(DET_CONDITION,),
         max_workers=max_workers,
@@ -120,8 +126,9 @@ def panel_gold(
 ) -> pd.DataFrame:
     """Majority ``mentions_topic`` per speech from panel cells.
 
-    ``exclude_definition``: pass the retrieval query's definition when scoring
-    retrieval (leave-one-definition-out); expert queries need no exclusion.
+    ``exclude_definition``: pass the retrieval query's definition id when
+    scoring retrieval (leave-one-definition-out) — required whenever the
+    query wording matches a panel definition, including ``expert_hc_sc``.
     ``exclude_model``: pass the evaluated model when scoring a model against
     gold (leave-one-model-out).
     Rows with parser-inferred presence are never counted as votes.
@@ -144,10 +151,11 @@ def panel_gold(
 
 
 def model_agreement(df: pd.DataFrame | None = None,
-                    *, definition: str = "current") -> pd.DataFrame:
+                    *, definition: str | None = None) -> pd.DataFrame:
     """Pairwise model agreement on presence, one cell per model (independent
     raters — unlike the pilot's 32-correlated-cells alpha)."""
     from itertools import combinations
+    definition = definition or config.DEFAULT_TOPIC.definition_id
     df = df if df is not None else load_panel(include_extended=True)
     sel = df[(df["condition"] == "temp0") & (df["definition"] == definition)
              & (df["parse_ok"])]
@@ -197,7 +205,7 @@ def main(argv: list[str] | None = None) -> None:
                     help="run the 2k extended-axis slice instead of the full "
                          "eval subset")
     ap.add_argument("--determinism", action="store_true",
-                    help="run the temp-0 repeat rider instead of the panel")
+                    help="run the temp-0 repeat add-on instead of the panel")
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--report", action="store_true",
                     help="print agreement + determinism reports from stored "
@@ -206,7 +214,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.report:
         try:
-            print("\n== pairwise model agreement (definition=current)")
+            print(f"\n== pairwise model agreement "
+                  f"(definition={config.DEFAULT_TOPIC.definition_id})")
             print(model_agreement().to_string(index=False))
         except FileNotFoundError:
             print("no panel runs yet")

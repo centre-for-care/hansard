@@ -30,12 +30,11 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from . import config
 from .embed import EmbeddingCache
 from .prompts import TASK_UNCAPPED
 
-# The model factor is model_id, not family: the qwen family holds two very
-# different models (30B-A3B and 235B-A22B), so grouping by family would leave
+# The model factor is model_id, not family: the qwen family holds several
+# different scales (4B / 14B / 30B-A3B / 32B), so grouping by family would leave
 # within-family size differences inside every "all else fixed" cell and
 # attribute them to whichever factor was being varied.
 FACTORS = ("role", "task", "output_format", "model_id")
@@ -110,7 +109,8 @@ def _core(df: pd.DataFrame) -> pd.DataFrame:
     if "task" in core.columns:
         core = core[core["task"] != TASK_UNCAPPED]
     if "definition" in core.columns:
-        core = core[core["definition"] == config.DEFAULT_TOPIC.definition_id]
+        # Pilot robustness grid was labeled under the ``current`` wording.
+        core = core[core["definition"] == "current"]
     return core.copy()
 
 

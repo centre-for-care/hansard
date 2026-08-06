@@ -1,113 +1,162 @@
-# hansard_llm — robustness-aware LLM topic extraction
+# hansard_llm — LLM panel + embedder retrieval
 
-A reproducible pilot pipeline that asks open-source LLMs (hosted on Nebius
-Token Factory) a targeted question about each parliamentary speech, for a
-**fixed topic** (default: *health and social care*):
+Ask open-weight models whether each parliamentary speech **substantively
+discusses health and social care**, list free-text **sub-topics**, and give a
+supporting **quote**. The same labels feed a **definition-as-query** retrieval
+experiment (embed speeches, rank by cosine to construct definitions).
 
-1. Does this speech **substantively discuss** the topic? *(presence — binary)*
-2. If so, which **sub-topics** does it raise? *(free-text, inductive)*
-3. A supporting **verbatim quote**. *(for human spot-checks / future gold)*
+**Default shipping definition:** `expert_hc_sc` (expert healthcare then social
+care). Speeches are sent in full (no char truncation).
 
-The goal is not a single answer but a **robustness study**: how much do the
-answers move when we vary things that *shouldn't* matter — prompt role, task
-wording, output format, and model? The pipeline measures that and attributes
-instability to each factor.
+Primary compute path: **Oxford BMRC cluster** with local **vLLM** (OpenAI-
+compatible client). See `../cluster/README.md` for env setup and sbatch.
 
-## Experimental design
+---
 
-The grid is the cartesian product of nuisance factors we want invariance to:
+## 0. Evaluation sample
 
-| Factor | Levels | Where |
-|---|---|---|
-| `role` | none / domain-expert | `prompts.ROLE_LEVELS` |
-| `task` | two paraphrases | `prompts.TASK_LEVELS` |
-| `output_format` | json / free (no format instruction) | `prompts.FORMAT_LEVELS` |
-| `model` | Qwen3-30B-A3B / gemma-3-27b / Llama-3.3-70B / Qwen3-235B (reference) | `config.CORE_MODELS` |
-| `condition` | temp 0 (1 rep) / temp 0.7 (N reps) | `run.CORE`, `run.SELFCONSISTENCY` |
+Panel and embedder grid share **`eval10k_sample.parquet`**
+(`sample.build_eval_subset` / `python -m hansard_llm.sample --eval-subset`).
 
-8 prompt variants × 4 models = 32 cells per speech at temp 0. The temp-0.7
-condition is the **self-consistency baseline**. (Temp-0 byte-determinism is an
-*assumption, not a guarantee* for hosted MoE serving with dynamic batching —
-the model-grid plan includes a repeat-at-temp-0 check to measure it.)
+**How it is drawn**
 
-## Pipeline
+- Pool: enriched Hansard parquet, non-procedural, `word_count ≥ 40`,
+  Commons/Lords, length tiers short/medium/long, with usable year.
+- **No keyword/seed oversampling** — random within decade so retention /
+  threshold estimates transfer to the natural corpus (unlike the pilot).
+- **Decade-stratified:** target ~10k total; per decade, allocate proportional
+  to decade size with a **floor of 250** (take-all if the decade is smaller).
+- Reservoir sample with fixed seed (`EVAL_SEED = 20260802`).
+- `sampling_weight` = decade population / decade draw (for corpus-level rates).
 
-```
-sample.draw_sample()    # stratified pilot sample (era × length × seed-presence)
-                        # + per-cell sampling weights for corpus-level rates
-run.execute(plan, experiment="...")   # grid → runs/<experiment>/<run_id>/
-                        # results.jsonl + manifest.json (idempotent, resumable)
-run.load_experiment("...")            # versioned store → DataFrame (reparsed)
-run.load_legacy()       # frozen pre-provenance pilot log, pool-annotated
-metrics.summarize(df)   # presence α, factor decomposition, prevalence spread,
-                        # semantic theme agreement
-metrics.discover_taxonomy(df)   # cluster emitted themes → "what's there"
-```
+Actual file size is a bit above 10k (~11.5k) because of floors + rounding.
 
-### Results store
-
-New runs write under `artifacts/llm/runs/<experiment>/<run_id>/` — one
-append-only `results.jsonl` plus a `manifest.json` recording the git SHA, the
-full prompt text per `prompt_hash`, models, conditions, and pool. Rows carry
-`experiment / run_id / pool / code_version / backend`. The pre-provenance
-single log is frozen at `artifacts/llm/legacy/` and is read through
-`run.load_legacy()`, which reconstructs the `pool` column (the legacy log mixed
-pilot and retrieval spot-check rows under identical labels — pilot analyses
-must filter `pool == "pilot"`).
-
-### Quick start
+**Pilot sample** (`pilot_sample.parquet`, `python -m hansard_llm.sample`) is
+separate: stratified on era × length × **seed-regex presence** (2:1
+present:absent). Used for older pilot arms / spot-checks, not the cluster panel.
 
 ```bash
-# 1. credentials — copy env.txt to .env and fill in (both are gitignored)
-# 2. draw the sample (one regex pass over the enriched Parquet)
-python -m hansard_llm.sample
-# 3. smoke run (first 3 speeches), then the full grid
-python -m hansard_llm.run --n-speeches 3
-python -m hansard_llm.run --workers 32
-# 4. add the self-consistency probe on a subset
-python -m hansard_llm.run --n-speeches 40 --self-consistency
+python -m hansard_llm.sample --eval-subset   # write eval10k
+python -m hansard_llm.sample                 # write pilot sample (legacy path)
 ```
+
+---
+
+## 1. LLM panel (`panel10k`)
+
+One job per model. Fixed prompt shape; vary **definition** and **sampling**.
+
+| Axis | Default |
+|------|---------|
+| Speeches | `eval10k_sample.parquet` (see §0) |
+| Definitions | `expert_hc_sc`, `expert_sc_hc`, `current`, `name_only` |
+| Role / task / format | `none` / `v1_nocap` / `json` |
+| Sampling | `temp0` (T=0, seed=42, 1 rep) **and** `temp07` (T=0.7, no seed, 1 rep) |
+| Models | `config.PANEL_MODELS` (= `CORE_MODELS`) — one per job |
+| Pool tag | `eval10k` |
+| Store | `artifacts/llm/runs/panel10k/<run_id>/` |
+
+**Panel models:** Qwen3-30B-A3B, Gemma-3-27B, Nemotron-Super-49B (FP8 on A100-80GB), Qwen3-32B.
+
+**Optional add-ons** (same prompt shape; not required for the main panel labels)
+
+| Flag | Experiment | Why it exists | What it runs |
+|------|------------|---------------|--------------|
+| `--extended` | `panel_extended2k` | Ask whether **size / family** moves answers without labeling all 10k on every small model | 2k stratified speeches × `EXTENDED_MODELS` (4B / 14B / Mistral-Small-24B) |
+| `--determinism` | `panel_determinism` | Hosted/serving stacks are **not** guaranteed byte-stable at T=0; measure the noise floor before reading model disagreement as real | 200 speeches × 1 definition × **3** temp-0 reps (same seed) |
+
+Gold and model-agreement analyses still use the main `panel10k` **`temp0`** rows.
+
+**Uses of the same rows**
+
+1. Model sensitivity (agreement across models; gold/agreement use **`temp0` only**).
+2. Retrieval gold via leave-one-definition-out: `panel.panel_gold(exclude_definition=…)`.
+3. Cross-model sub-topic / taxonomy work.
+
+```bash
+# Cluster (serve + panel in one job):
+sbatch --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 cluster/run_grid.sbatch
+sbatch --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,VLLM_ARGS="--quantization fp8" \
+       cluster/run_grid.sbatch
+sbatch --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" cluster/run_grid.sbatch
+
+# Or against an already-running endpoint:
+export LLM_BASE_URL=… LLM_API_KEY=… LLM_BACKEND_NAME=vllm-…
+python -m hansard_llm.panel --model Qwen/Qwen3-32B --workers 32
+```
+
+Each cell stores **`raw_text`** (generation) plus parsed fields, tokens,
+`latency_s`, and provenance. Parse is CPU-only, inline after each completion.
+`load_experiment` can **reparse** from `raw_text` if the parser improves.
+
+Deferred: `REFERENCE_MODELS` (Qwen3-235B — not downloaded / not in default plans),
+`REASONING_MODELS`. Older pilot nuisance grids live under `python -m hansard_llm.run`
+(`--definitions`, `--no-cap`, …) and are not the cluster default.
+
+---
+
+## 2. Embedder grid (retrieval sensitivity)
+
+Does ranking change with **embedder**, **query wording**, and **document
+representation**?
+
+| Axis | Levels |
+|------|--------|
+| Model | 8 embedders in `embedder_grid.EMBEDDERS` (Qwen3 0.6B/4B/8B size axis; BGE base/large; GTE-large; E5-large; Nomic v1.5) |
+| Representation | `whole` / `maxchunk` / `meanchunk` (chunks from `retrieve.split_chunks`) |
+| Query | same ids as `PANEL_DEFINITIONS` |
+| Speeches | same `eval10k_sample.parquet` |
+| Backend | `st` (sentence-transformers, cluster) or `api` (OpenAI-compatible embeddings) |
+| Store | `artifacts/llm/runs/embedder_grid/<run_id>/` (`scores_*.parquet` + manifest) |
+
+```bash
+sbatch cluster/embed_grid.sbatch          # array 0–7, one embedder each
+python -m hansard_llm.embedder_grid --list
+python -m hansard_llm.embedder_grid --model Qwen/Qwen3-Embedding-8B --backend st
+python -m hansard_llm.embedder_grid --diagnostics   # gold-free rank agreement / length bias
+```
+
+**Eval against LLM gold (LODO):** once `panel10k` exists, score each query with
+`retrieve.gold_for_query(qid)` / `panel.panel_gold(exclude_definition=qid)` so a
+definition is never scored against labels produced from that same wording.
+`retrieve.evaluate_all` does this per query when panel rows are available
+(falls back to pilot majority until then).
+
+Related: `python -m hansard_llm.retrieve` — earlier pilot/filter-pool embedding
+path (whole + maxchunk, keyword baseline, spot-check). Prefer the embedder grid
++ panel LODO for the eval-subset sensitivity study.
+
+---
+
+## 3. Shared data & results layout
+
+Paths resolve from env (`HANSARD_LLM_*` / `~/.config/hansard_llm.env` on cluster);
+defaults point at sibling `hansard_eda/artifacts/llm/`.
+
+| Artifact | Role |
+|----------|------|
+| `eval10k_sample.parquet` | Eval speeches for panel + embedder grid (§0) |
+| `pilot_sample.parquet` | Older stratified pilot (legacy / spot-check) |
+| `runs/<experiment>/<run_id>/manifest.json` | Git SHA, prompts, models, conditions, backend |
+| `runs/<experiment>/<run_id>/results.jsonl` | LLM cells (append-only, resumable) |
+| `runs/embedder_grid/<run_id>/` | Embedding scores + manifest |
+| `legacy/` | Frozen pre-provenance pilot JSONL |
+
+Cache key for LLM cells: `speech_id|prompt_hash|model|temperature|seed|rep`.
 
 ```python
-from hansard_llm import run, metrics
-df = run.load_results()
-metrics.summarize(df)
+from hansard_llm import run, panel
+df = run.load_experiment("panel10k")
+gold = panel.panel_gold(exclude_definition="expert_hc_sc")  # LODO for that query
 ```
 
-## Design choices that make it reproducible
+---
 
-- **Raw text is the source of truth.** Parsed fields are derived; `load_results`
-  reparses from `raw_text`, so improving the parser never re-bills the model.
-- **Idempotent cache.** Cells are keyed by
-  `speech_id|prompt_hash|model|temperature|seed|rep`; re-runs skip completed work.
-- **Full provenance** per call (model, params, tokens, latency, attempts, finish
-  reason) in the JSONL log.
-- **Pinned, declarative config.** Models, topic, and sample design live in
-  `config.py` / `sample.py`.
-- **Open vocabulary, semantic comparison.** Sub-themes are free text; agreement
-  is measured in embedding space (`Qwen3-Embedding-8B`, cached on disk), not by
-  string match.
+## 4. Design notes
 
-## What is measured
-
-- **Presence:** Krippendorff's α + mean pairwise agreement across the grid;
-  per-factor marginal disagreement (which factor destabilises most).
-- **Self-consistency:** the same, across temp-0.7 repetitions.
-- **Sub-themes:** mean soft-Jaccard (bipartite phrase matching at cosine τ);
-  a clustered discovered taxonomy with per-cluster speech prevalence.
-- **Estimand:** topic prevalence per cell and its spread — does the headline
-  number survive perturbation even when item labels flip?
-
-## Tunables / open items
-
-- `metrics.DEFAULT_TAU` (0.72) — same-theme cosine threshold. Qwen embeddings
-  have a high baseline (~0.47 even for unrelated phrases); the reproducible
-  taxonomy (`docs/build_taxonomy.py`) uses `distance_threshold=0.25` and
-  records it in a sidecar manifest. Note: at 0.25 the pilot arm yields 285
-  clusters, not the 152 in the original brief — that number came from a
-  since-deleted script with unrecorded settings and should not be cited.
-- Reasoning models (`config.REASONING_MODELS`: Kimi-K2.6, gpt-oss-120b) are a
-  deferred separate axis — they emit a reasoning trace and need a larger token
-  budget; mixing them into the core grid would confound reasoning with family.
-- **Validity (not just consistency)** is deferred until the hand-labelled gold
-  set exists; `metrics` has a slot for it.
+- **Raw text is source of truth**; parsed columns are a snapshot.
+- **Idempotent resume** across run directories of the same experiment.
+- **Open vocabulary** for sub-themes; compare in embedding space downstream.
+- **A100 + FP8:** weight-only FP8 (W8A16) for Nemotron-49B — not native FP8 compute (Hopper/GH200).
+- Cluster wiring: `cluster/run_grid.sbatch` → `vllm serve` + `python -m hansard_llm.panel`;
+  `cluster/embed_grid.sbatch` → embedder array; details in `../cluster/README.md`.

@@ -342,9 +342,10 @@ def load_results(log_path: Path = RESULTS_LOG, *, to_parquet: bool = False,
     # definition; without this backfill they would read as NaN and drop out of
     # any groupby on the column.
     if "definition" not in df.columns:
-        df["definition"] = config.DEFAULT_TOPIC.definition_id
+        # Pre-definition-arm rows used the pilot ``current`` wording.
+        df["definition"] = "current"
     else:
-        df["definition"] = df["definition"].fillna(config.DEFAULT_TOPIC.definition_id)
+        df["definition"] = df["definition"].fillna("current")
     if reparse:
         df = reparse_results(df)
     if to_parquet:
@@ -474,9 +475,9 @@ def definition_plan(
     """The definition-sensitivity arm: alternative construct definitions at the
     new default configuration (role=none, uncapped, both formats, all models).
 
-    The ``current`` definition is excluded by default because those exact cells
-    already exist as the uncapped arm, so the baseline for the comparison costs
-    nothing. Sizing: len(definitions) x 2 formats x len(models) cells per speech.
+    Sizing: len(definitions) x 2 formats x len(models) cells per speech.
+    Default definitions are ``config.ALT_DEFINITIONS`` (expert orders, current,
+    name-only).
     """
     from . import sample
     df = sample.load_sample()
@@ -500,7 +501,7 @@ def uncapped_role_plan(
     conditions: tuple[Condition, ...] = (CORE,),
     max_workers: int = 16,
 ) -> RunPlan:
-    """Role rider: the uncapped task at role=expert, so role invariance can be
+    """Role add-on: the uncapped task at role=expert, so role invariance can be
     re-confirmed under the configuration we actually ship rather than under the
     retired capped default. Pairs against the cached role=none uncapped cells.
     """
@@ -539,7 +540,7 @@ if __name__ == "__main__":
                          f"otherwise the named ones. Choices: "
                          f"{tuple(config.HSC_DEFINITIONS)}")
     ap.add_argument("--role-check", action="store_true",
-                    help="run the role rider (role=expert, uncapped) to re-confirm "
+                    help="run the role add-on (role=expert, uncapped) to re-confirm "
                          "role invariance under the current default config")
     args = ap.parse_args()
 

@@ -84,7 +84,7 @@ SPOTCHECK_MODELS: tuple[ModelSpec, ...] = tuple(
     m for m in config.CORE_MODELS
     if m.model_id in (
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
-        "meta-llama/Llama-3.3-70B-Instruct",
+        "nvidia/Llama-3_3-Nemotron-Super-49B-v1_5",
     )
 )
 
@@ -93,15 +93,19 @@ SPOTCHECK_MODELS: tuple[ModelSpec, ...] = tuple(
 # Queries
 # --------------------------------------------------------------------------
 def query_texts() -> dict[str, str]:
-    """Construct-definition queries for the retrieval arm."""
+    """Construct-definition queries for the retrieval arm.
+
+    Panel-overlapping ids (``config.PANEL_DEFINITIONS``) must be evaluated
+    with leave-one-definition-out gold via :func:`gold_for_query`.
+    """
     return {
         "expert_hc_sc": config.HSC_DEFINITIONS["expert_hc_sc"].description,
         "expert_sc_hc": config.HSC_DEFINITIONS["expert_sc_hc"].description,
         "current": config.HSC_DEFINITIONS["current"].description,
+        "name_only": config.HSC_DEFINITIONS["current"].name,
         "era_neutral": config.HSC_DEFINITIONS["era_neutral"].description,
         "expert_hc_only": config._EXPERT_HEALTHCARE,
         "expert_sc_only": config._EXPERT_SOCIAL_CARE,
-        "name_only": "health and social care",
     }
 
 
@@ -494,7 +498,11 @@ def load_filter_pool() -> pd.DataFrame:
 def pilot_majority_gold(
     definition: str = "expert_hc_sc",
 ) -> pd.DataFrame:
-    """Speech-level majority ``mentions_topic`` under the shipping default.
+    """Speech-level majority ``mentions_topic`` under one pilot definition.
+
+    Fallback when panel10k labels are not available yet. Prefer
+    :func:`gold_for_query` (panel leave-one-definition-out) for retrieval
+    claims once the panel has run.
 
     Restricted to the pilot pool: the legacy log also holds filter-pool rows
     from the spot-check under identical grid labels, rated by only 2 models
@@ -514,6 +522,27 @@ def pilot_majority_gold(
          .reset_index())
     g["label"] = (g["rate"] >= 0.5).astype(int)
     return g
+
+
+def gold_for_query(query_id: str) -> pd.DataFrame:
+    """Binary presence labels for scoring one retrieval query.
+
+    Prefer panel majority with leave-one-definition-out when ``query_id`` is
+    one of ``config.PANEL_DEFINITIONS`` (so the query is never scored against
+    gold produced from the same wording). Other query ids use the full panel
+    majority (no exclusion). Falls back to :func:`pilot_majority_gold` until
+    panel rows exist.
+    """
+    try:
+        from . import panel
+        exclude = (query_id if query_id in config.PANEL_DEFINITIONS
+                   else None)
+        return panel.panel_gold(exclude_definition=exclude)
+    except FileNotFoundError:
+        # No panel yet: same-definition pilot majority (diagnostic only).
+        if query_id in config.HSC_DEFINITIONS:
+            return pilot_majority_gold(definition=query_id)
+        return pilot_majority_gold()
 
 
 # --------------------------------------------------------------------------
@@ -972,16 +1001,42 @@ def embed_and_score(*, modes: tuple[str, ...] = ("whole", "maxchunk")) -> pd.Dat
 
 
 def evaluate_all(scores: pd.DataFrame | None = None) -> dict:
-    """Pilot ranking metrics + filter-pool seed summary; writes the metrics JSON."""
+    """Pilot ranking metrics + filter-pool seed summary; writes the metrics JSON.
+
+    Each query is scored against :func:`gold_for_query` (panel LODO when
+    available) so matched-definition circularity is avoided for panel defs.
+    """
     if scores is None:
         scores = pd.read_parquet(SCORES_PATH)
-    gold = pilot_majority_gold()
     pilot_scores = scores[scores["pool"] == "pilot"]
-    metrics = evaluate_ranking(pilot_scores, gold)
+    by_query: list[dict] = []
+    thresholds: list[dict] = []
+    keyword_baseline: dict = {}
+    n_labeled = 0
+    n_pos = 0
+    for qid in sorted(pilot_scores["query_id"].unique()):
+        gold = gold_for_query(qid)
+        n_labeled = max(n_labeled, int(len(gold)))
+        n_pos = max(n_pos, int(gold["label"].sum()))
+        sub = pilot_scores[pilot_scores["query_id"] == qid]
+        m = evaluate_ranking(sub, gold)
+        by_query.extend(m["by_query"])
+        thresholds.extend(m.get("thresholds", []))
+        if not keyword_baseline and m.get("keyword_baseline"):
+            keyword_baseline = m["keyword_baseline"]
+    by_query = sorted(
+        by_query, key=lambda r: (-r["average_precision"], r["query_id"], r["mode"])
+    )
+    metrics: dict = {
+        "by_query": by_query,
+        "keyword_baseline": keyword_baseline,
+        "thresholds": thresholds,
+        "gold": "panel_lodo_or_pilot_fallback",
+    }
     filt_scores = scores[scores["pool"] == "filter"]
     metrics["filter_pool_by_seed"] = filter_pool_seed_summary(filt_scores)
-    metrics["n_pilot_labeled"] = int(len(gold))
-    metrics["n_pilot_pos"] = int(gold["label"].sum())
+    metrics["n_pilot_labeled"] = n_labeled
+    metrics["n_pilot_pos"] = n_pos
     METRICS_PATH.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"wrote {METRICS_PATH}")
     # print top lines

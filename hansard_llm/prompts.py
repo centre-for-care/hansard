@@ -58,12 +58,20 @@ def _role_block(level: str, topic: Topic) -> str:
     raise ValueError(f"unknown role level {level!r}")
 
 
+def _topic_ref(topic: Topic) -> str:
+    """How the construct is named in the task: bare name, or name + definition."""
+    if not (topic.description or "").strip():
+        return topic.name
+    return f"{topic.name} — that is, {topic.description}"
+
+
 def _task_block(level: str, topic: Topic) -> str:
     n = topic.max_subthemes
+    ref = _topic_ref(topic)
     if level == "v1":
         return (
             f"Determine whether the parliamentary speech below substantively "
-            f"discusses {topic.name} — that is, {topic.description} — rather "
+            f"discusses {ref} — rather "
             f"than merely mentioning it in passing.\n"
             f"If it does, identify the specific sub-topics of {topic.name} that "
             f"it discusses. Describe each sub-topic in your own words as a short "
@@ -72,10 +80,15 @@ def _task_block(level: str, topic: Topic) -> str:
             f"the speech as supporting evidence."
         )
     if level == "v2":
+        scope = (
+            f"Treat {topic.name} as: {topic.description}."
+            if (topic.description or "").strip()
+            else f"Treat the topic as {topic.name}."
+        )
         return (
             f"Read the parliamentary speech below. Decide if {topic.name} is a "
             f"substantive subject of the speech and not just a passing "
-            f"reference. Treat {topic.name} as: {topic.description}.\n"
+            f"reference. {scope}\n"
             f"When it is a substantive subject, list the particular aspects of "
             f"{topic.name} it covers, each as a brief free-text label of a few "
             f"words. Provide no more than {n} such labels.\n"
@@ -89,7 +102,7 @@ def _task_block(level: str, topic: Topic) -> str:
         # difference from the cached capped cells is the cap itself.
         return (
             f"Determine whether the parliamentary speech below substantively "
-            f"discusses {topic.name} — that is, {topic.description} — rather "
+            f"discusses {ref} — rather "
             f"than merely mentioning it in passing.\n"
             f"If it does, identify the specific sub-topics of {topic.name} that "
             f"it discusses. Describe each sub-topic in your own words as a short "

@@ -15,8 +15,8 @@ Grid axes
                   recorded in the run manifest); maxchunk is the length-bias
                   arm (max-over-chunks mechanically rewards longer texts),
                   meanchunk the length-bias control.
-* query           4 retained definitions (expert_hc_sc, expert_sc_hc,
-                  era_neutral, current) + name_only as a free diagnostic.
+* query           panel definitions (expert_hc_sc, expert_sc_hc, current,
+                  name_only) — evaluate with leave-one-definition-out gold
 
 Backends: ``st`` (sentence-transformers, local GPU/CPU — the cluster path) or
 ``api`` (OpenAI-compatible /embeddings endpoint — the Nebius path, used for
@@ -103,9 +103,8 @@ _DOC_TEMPLATE = {
     "intfloat/e5-large-v2": "passage: {text}",
 }
 
-# The retained query axis (user decision) + free diagnostic baseline.
-QUERY_IDS: tuple[str, ...] = ("expert_hc_sc", "expert_sc_hc", "era_neutral",
-                              "current", "name_only")
+# The retained query axis: same defs as the LLM panel (+ LODO at eval time).
+QUERY_IDS: tuple[str, ...] = config.PANEL_DEFINITIONS
 
 REPRESENTATIONS: tuple[str, ...] = ("whole", "maxchunk", "meanchunk")
 
@@ -122,9 +121,10 @@ _CORPUS_N = 9_196_605
 
 
 def grid_queries() -> dict[str, str]:
-    q = {qid: config.HSC_DEFINITIONS[qid].description
-         for qid in QUERY_IDS if qid in config.HSC_DEFINITIONS}
-    q["name_only"] = "health and social care"
+    q = {}
+    for qid in QUERY_IDS:
+        t = config.HSC_DEFINITIONS[qid]
+        q[qid] = (t.description or "").strip() or t.name
     return q
 
 

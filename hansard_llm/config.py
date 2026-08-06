@@ -111,30 +111,26 @@ class ModelSpec:
     tier: str = "production"
 
 
-# Core grid: three non-reasoning instruct models from three families, chosen so
-# the pilot's model-robustness findings transfer to production on the Oxford
-# BMRC cluster. Selection criteria:
-#   - open-weight (downloadable to self-serve on BMRC), and
-#   - servable on a SINGLE A100-80GB at FP8 (the cluster workhorse), and
-#   - hosted on Nebius too, so the pilot runs unchanged.
-# Production uses a two-stage design (cheap filter -> LLM on the candidate
-# subset, ~300k for H&SC), so 27-70B is affordable; the 8B tier is unnecessary.
-# Size spread is intentional: tests both family and "does 70B beat the fast MoE".
-# The 4th entry (Qwen3-235B-A22B) is a size-ceiling REFERENCE only: if it agrees
-# closely with the small production models, that justifies deploying the cheap
-# one. Pairing it with Qwen3-30B-A3B gives a clean within-family size contrast
-# (isolates size from family); Gemma/Llama give the cross-family contrast.
+# Active non-reasoning grid for new runs — aligned with the cluster panel.
+# Servable on a single A100-80GB (Nemotron-49B needs FP8). Qwen3-235B is
+# deferred in REFERENCE_MODELS and must not be pulled into default plans or
+# download scripts until we deliberately schedule it.
 CORE_MODELS: tuple[ModelSpec, ...] = (
-    ModelSpec("Qwen/Qwen3-30B-A3B-Instruct-2507", family="qwen"),   # MoE, 3B active — production frontrunner
+    ModelSpec("Qwen/Qwen3-30B-A3B-Instruct-2507", family="qwen"),   # MoE, 3B active
     ModelSpec("google/gemma-3-27b-it", family="google"),            # 27B dense
-    ModelSpec("meta-llama/Llama-3.3-70B-Instruct", family="meta"),  # 70B @ FP8 — production quality ceiling
-    ModelSpec("Qwen/Qwen3-235B-A22B-Instruct-2507", family="qwen",  # 235B MoE — size-ceiling REFERENCE, not for deployment
-              tier="reference"),
+    ModelSpec("nvidia/Llama-3_3-Nemotron-Super-49B-v1_5", family="nvidia"),  # was Llama-3.3-70B
+    ModelSpec("Qwen/Qwen3-32B", family="qwen"),                    # dense sibling of 30B-A3B
 )
 
 # Production-feasible subset (used when picking what to actually deploy).
 PRODUCTION_MODELS: tuple[ModelSpec, ...] = tuple(
     m for m in CORE_MODELS if m.tier == "production")
+
+# Size-ceiling reference — not in CORE/PANEL, not downloaded by default.
+REFERENCE_MODELS: tuple[ModelSpec, ...] = (
+    ModelSpec("Qwen/Qwen3-235B-A22B-Instruct-2507", family="qwen",
+              tier="reference"),
+)
 
 # Reasoning-class models, available but deferred to a separate axis. They need
 # a much larger budget because the reasoning trace consumes tokens first.
@@ -147,15 +143,9 @@ REASONING_MODELS: tuple[ModelSpec, ...] = (
 # Panel models (cluster vLLM; Workstream C2 — the unified model-sensitivity
 # experiment whose labels double as retrieval gold via leave-one-out)
 # --------------------------------------------------------------------------
-# Core panel: labels all ~10k eval speeches. Nemotron-Super-49B replaces the
-# dated Llama-3.3-70B (single 80GB GPU at FP8, reasoning off); Qwen3-32B dense
-# pairs with 30B-A3B for a dense-vs-MoE contrast at similar scale.
-PANEL_MODELS: tuple[ModelSpec, ...] = (
-    ModelSpec("Qwen/Qwen3-30B-A3B-Instruct-2507", family="qwen"),
-    ModelSpec("google/gemma-3-27b-it", family="google"),
-    ModelSpec("nvidia/Llama-3_3-Nemotron-Super-49B-v1_5", family="nvidia"),
-    ModelSpec("Qwen/Qwen3-32B", family="qwen"),
-)
+# Same set as CORE_MODELS: Nemotron-Super-49B replaces Llama-3.3-70B
+# (single 80GB GPU at FP8); Qwen3-32B pairs with 30B-A3B for dense-vs-MoE.
+PANEL_MODELS: tuple[ModelSpec, ...] = CORE_MODELS
 
 # Extended size/family axis: runs on a ~2k subsample only.
 EXTENDED_MODELS: tuple[ModelSpec, ...] = (
@@ -164,14 +154,15 @@ EXTENDED_MODELS: tuple[ModelSpec, ...] = (
     ModelSpec("mistralai/Mistral-Small-3.2-24B-Instruct-2506", family="mistral"),
 )
 
-# The definitions the panel labels under. Deliberately the two NON-expert
-# retained definitions: retrieval queries using the expert permutations are
-# then automatically non-circular against panel gold, and era_neutral/current
-# queries use leave-one-definition-out (see panel.panel_gold).
-PANEL_DEFINITIONS: tuple[str, ...] = ("era_neutral", "current")
+# Panel labels under the definitions we actually care about. Retrieval eval
+# must use leave-one-definition-out (panel.panel_gold(exclude_definition=…))
+# so a query is never scored against gold produced from the same wording.
+PANEL_DEFINITIONS: tuple[str, ...] = (
+    "expert_hc_sc", "expert_sc_hc", "current", "name_only",
+)
 
 MODELS_BY_ID = {m.model_id: m for m in
-                CORE_MODELS + REASONING_MODELS + PANEL_MODELS + EXTENDED_MODELS}
+                CORE_MODELS + EXTENDED_MODELS + REFERENCE_MODELS + REASONING_MODELS}
 
 
 # --------------------------------------------------------------------------
@@ -248,9 +239,8 @@ HEALTH_SOCIAL_CARE = Topic(
         "that care"
     ),
     seed_regex=_HSC_SEED_REGEX,
+    definition_id="current",
 )
-
-DEFAULT_TOPIC = HEALTH_SOCIAL_CARE
 
 # --------------------------------------------------------------------------
 # Alternative construct definitions (the definition-sensitivity arm)
@@ -319,14 +309,23 @@ _EXPERT_DEFINITION_TEXT = {
 
 HSC_DEFINITIONS: dict[str, Topic] = {
     "current": HEALTH_SOCIAL_CARE,
+    # Name-only baseline: topic name with no expanded construct wording.
+    "name_only": replace(
+        HEALTH_SOCIAL_CARE, description="", definition_id="name_only",
+    ),
     **{
         key: replace(HEALTH_SOCIAL_CARE, description=text, definition_id=key)
         for key, text in {**_DEFINITION_TEXT, **_EXPERT_DEFINITION_TEXT}.items()
     },
 }
 
+# Shipping default: expert healthcare-then-social-care wording.
+DEFAULT_TOPIC = HSC_DEFINITIONS["expert_hc_sc"]
+
 # New uncached arms for the next definition run. Prior alts
 # (era_neutral / narrow_clinical / broad_determinants) stay in
 # HSC_DEFINITIONS so cached rows remain joinable; pass them explicitly via
 # ``--definitions`` if you need to re-run or extend them.
-ALT_DEFINITIONS: tuple[str, ...] = tuple(_EXPERT_DEFINITION_TEXT)
+ALT_DEFINITIONS: tuple[str, ...] = (
+    "expert_hc_sc", "expert_sc_hc", "current", "name_only",
+)

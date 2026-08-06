@@ -5,14 +5,19 @@
 #SBATCH --gres=gpu:1
 #SBATCH --output=logs/%x-%j.out
 
-# Serve vLLM in the background, wait for health, run the experiment against
-# it via LLM_BASE_URL (client.py is OpenAI-compatible — zero code changes).
+# Serve vLLM in the background, wait for health, run the panel experiment
+# against it via LLM_BASE_URL (client.py is OpenAI-compatible).
 #
-#   sbatch --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507,RUN_ARGS="--panel" \
+#   sbatch --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
 #          cluster/run_grid.sbatch
+#   sbatch --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" \
+#          cluster/run_grid.sbatch
+#   sbatch --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
+#VLLM_ARGS="--quantization fp8" cluster/run_grid.sbatch
 #
-# MODEL (required) HF id; RUN_ARGS for `python -m hansard_llm.run`;
-# VLLM_ARGS e.g. "--quantization fp8" (Nemotron-49B on 80GB); PORT; WORKERS.
+# MODEL (required) HF id from config.PANEL_MODELS / EXTENDED_MODELS;
+# RUN_ARGS extra flags for `python -m hansard_llm.panel` (e.g. --extended,
+# --determinism); VLLM_ARGS; PORT; WORKERS.
 
 set -euo pipefail
 source ~/.config/hansard_llm.env
@@ -46,7 +51,8 @@ export LLM_BASE_URL="http://127.0.0.1:$PORT/v1"
 export LLM_API_KEY="local"
 export LLM_BACKEND_NAME="vllm-${SLURM_CLUSTER_NAME:-cluster}"
 
-python -m hansard_llm.run ${RUN_ARGS:-} --workers "${WORKERS:-32}"
+python -m hansard_llm.panel --model "$MODEL" ${RUN_ARGS:-} \
+    --workers "${WORKERS:-32}"
 
 kill $VLLM_PID 2>/dev/null || true
 echo "done"
