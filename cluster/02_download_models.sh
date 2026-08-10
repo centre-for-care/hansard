@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
-# Download model weights into the HF cache on /well. Login node only (compute
-# nodes have no internet); use tmux for the big LLM batch. Idempotent/resumable.
+# Download model weights into $HF_HOME on /well. Login node only (compute nodes
+# have no internet); use tmux for the LLM batch. Idempotent/resumable.
 # Gated models (Gemma, Nemotron) need `hf auth login` once.
 #
+# Prerequisites (cluster/README.md §§3–5):
+#   source ~/.config/hansard_llm.env
+#   source "$VENV_DIR/bin/activate"
 #   bash cluster/02_download_models.sh [embedders|llms|all|<hf-model-id>...]
 
 set -euo pipefail
 WHAT="${1:-all}"
 
-# The shared env file forces offline mode for compute nodes; downloads are
-# the one place that must reach the hub.
+: "${HF_HOME:?source ~/.config/hansard_llm.env first (sets HF_HOME)}"
+command -v hf >/dev/null || {
+  echo "hf CLI not found — source \"\$VENV_DIR/bin/activate\" first (huggingface_hub)" >&2
+  exit 1
+}
+
+# Env file forces offline mode for compute jobs; downloads must reach the hub.
 unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
 
 EMBEDDERS=(
@@ -23,7 +31,7 @@ EMBEDDERS=(
   nomic-ai/nomic-embed-text-v1.5
 )
 
-# Panel + extended axis (plan C2). Nemotron-Super-49B: FP8 on one 80GB GPU.
+# Panel + extended axis. Nemotron-Super-49B: FP8 on one 80GB GPU.
 LLMS=(
   Qwen/Qwen3-30B-A3B-Instruct-2507
   google/gemma-3-27b-it
@@ -41,7 +49,7 @@ case "$WHAT" in
   llms)      dl "${LLMS[@]}" ;;
   all)       dl "${EMBEDDERS[@]}"; dl "${LLMS[@]}" ;;
   -h|--help) echo "usage: $0 [embedders|llms|all|<hf-model-id>...]"; exit 0 ;;
-  *)         dl "$@" ;;   # explicit ids, for pipelined download+run
+  *)         dl "$@" ;;
 esac
 
-echo; echo "cache usage:"; du -sh "${HF_HOME:-$HOME/.cache/huggingface}"
+echo; echo "cache usage:"; du -sh "$HF_HOME"

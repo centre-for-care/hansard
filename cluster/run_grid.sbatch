@@ -4,9 +4,9 @@
 #SBATCH --gres=gpu:1
 #SBATCH --output=logs/%x-%j.out
 
-# Serve vLLM in the background, wait for health, run the panel experiment
-# against it via LLM_BASE_URL (client.py is OpenAI-compatible).
-# Always pass -A (scripts do not set --account); see cluster/README.md.
+# vLLM in the background + hansard_llm.panel against LLM_BASE_URL.
+# Setup: cluster/README.md. Always pass -A (no #SBATCH --account).
+# Submit from $HANSARD_SCRATCH/hansard so logs/ lands next to the repo.
 #
 #   sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
 #          cluster/run_grid.sbatch
@@ -15,16 +15,14 @@
 #   sbatch -A gpu_<group>.prj --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
 #          VLLM_ARGS="--quantization fp8" cluster/run_grid.sbatch
 #
-# MODEL (required) HF id from config.PANEL_MODELS / EXTENDED_MODELS;
-# RUN_ARGS extra flags for `python -m hansard_llm.panel` (e.g. --extended,
-# --determinism); VLLM_ARGS; PORT; WORKERS.
+# MODEL (required); RUN_ARGS (--extended, --determinism); VLLM_ARGS; PORT; WORKERS.
 
 set -euo pipefail
 source ~/.config/hansard_llm.env
 if [ "$(uname -m)" = "aarch64" ]; then
-  source "${VENV_DIR_ARM:?run 01b_setup_env_gh200.sh first}/bin/activate"
+  source "${VENV_DIR_ARM:?run cluster/01b_setup_env_gh200.sh first}/bin/activate"
 else
-  source "$VENV_DIR/bin/activate"
+  source "${VENV_DIR:?VENV_DIR unset — run cluster/01_setup_env.sh}/bin/activate"
 fi
 mkdir -p logs
 

@@ -7,8 +7,9 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/%x-%j.out
 
-# Standalone server for interactive use; writes host:port for clients.
-# Always pass -A (scripts do not set --account); see cluster/README.md.
+# Standalone vLLM server; writes host:port for clients.
+# Setup: cluster/README.md. Always pass -A (no #SBATCH --account).
+# Submit from $HANSARD_SCRATCH/hansard so logs/ lands next to the repo.
 #
 #   sbatch -A gpu_<group>.prj --export=ALL,MODEL=google/gemma-3-27b-it cluster/serve_llm.sbatch
 #   export LLM_BASE_URL="http://$(cat logs/vllm-endpoint-<jobid>)/v1" LLM_API_KEY=local
@@ -19,9 +20,9 @@
 set -euo pipefail
 source ~/.config/hansard_llm.env
 if [ "$(uname -m)" = "aarch64" ]; then
-  source "${VENV_DIR_ARM:?run 01b_setup_env_gh200.sh first}/bin/activate"
+  source "${VENV_DIR_ARM:?run cluster/01b_setup_env_gh200.sh first}/bin/activate"
 else
-  source "$VENV_DIR/bin/activate"
+  source "${VENV_DIR:?VENV_DIR unset — run cluster/01_setup_env.sh}/bin/activate"
 fi
 mkdir -p logs
 

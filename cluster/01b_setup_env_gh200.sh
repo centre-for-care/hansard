@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# ARM (aarch64) venv for vLLM on GH200 nodes (details: cluster/README.md).
-# Downloads happen on the login node; the GPU-node step is an offline unpack
-# only — a venv must be created by an ARM python, which exists only there.
+# ARM (aarch64) venv for vLLM on GH200 (cluster/README.md).
+# Prerequisites: §§1–3 done (project root, clone, 01_setup_env.sh / env file).
+# Does not mkdir or clone. Login node: download wheels; GH200 node: install.
 #
-#   bash cluster/01b_setup_env_gh200.sh download    # login node
+#   bash cluster/01b_setup_env_gh200.sh download
 #   srun -A gpu_<group>.prj -p gpu_gh200_144gb --gres=gpu:1 -t 30 --mem=32G \
 #        bash cluster/01b_setup_env_gh200.sh install
 
@@ -12,7 +12,8 @@ PHASE="${1:?usage: $0 [download|install]}"
 
 # shellcheck disable=SC1090
 source "$HOME/.config/hansard_llm.env"
-SCRATCH_DIR="${HANSARD_SCRATCH:?run 01_setup_env.sh first}"
+SCRATCH_DIR="${HANSARD_SCRATCH:?source ~/.config/hansard_llm.env first (README §§1–3)}"
+REPO_DIR="$SCRATCH_DIR/hansard"
 WHEEL_DIR="$SCRATCH_DIR/wheels-aarch64"
 export PIP_CACHE_DIR="$SCRATCH_DIR/.pip-cache"
 
@@ -38,13 +39,16 @@ case "$PHASE" in
   install)
     [ "$(uname -m)" = "aarch64" ] || {
       echo "ERROR: $(uname -m) node — install must run on a GH200 node"; exit 1; }
+    if [ ! -d "$REPO_DIR" ]; then
+      echo "missing $REPO_DIR — clone first (cluster/README.md §§1–2)" >&2
+      exit 1
+    fi
     ENV_DIR="$SCRATCH_DIR/hansard-env-arm"
     python3 -m venv "$ENV_DIR"
     # shellcheck disable=SC1091
     source "$ENV_DIR/bin/activate"
     pip install --no-index --find-links "$WHEEL_DIR" "${PKGS[@]}"
-    [ -d "$SCRATCH_DIR/hansard" ] && \
-      pip install --no-index --no-deps --no-build-isolation -e "$SCRATCH_DIR/hansard"
+    pip install --no-index --no-deps --no-build-isolation -e "$REPO_DIR"
 
     CFG="$HOME/.config/hansard_llm.env"
     grep -q VENV_DIR_ARM "$CFG" \

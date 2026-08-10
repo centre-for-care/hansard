@@ -65,7 +65,7 @@ Per model ≈ 2k × 4 defs × 2 temps ≈ **~16k cells** (watch determinism cell
 **Run `--determinism` first** (before full `panel2k` or the embedder grid):
 smoke-test serve→client wiring **and** measure cells/s so you can extrapolate
 wall time. Use the same `MODEL` (and `VLLM_ARGS`) you intend for the real
-panel. Details: `../cluster/README.md` sanity ladder.
+panel. Details: `../cluster/README.md` (smoke / determinism, then full grids).
 
 **Optional add-ons** (same prompt shape; not required for the main panel labels)
 
@@ -83,8 +83,7 @@ Gold and model-agreement analyses still use the main `panel2k` **`temp0`** rows.
 3. Cross-model sub-topic / taxonomy work.
 
 ```bash
-# Cluster — always pass -A (scripts do not set --account); see ../cluster/README.md
-# Determinism first (smoke + timing; ~600 cells):
+# Cluster — always pass -A; setup + submit details in ../cluster/README.md
 sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507,RUN_ARGS="--determinism" \
        cluster/run_grid.sbatch
 sbatch -A gpu_<group>.prj --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\

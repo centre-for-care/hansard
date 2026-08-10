@@ -5,18 +5,19 @@
 #SBATCH --array=0-7                # one task per embedder (see MODELS below)
 #SBATCH --output=logs/%x-%A_%a.out
 
-# Embedder grid: one model per array task, scoring the eval subset in all
-# representations x queries (hansard_llm/embedder_grid.py, local ST backend).
-# Always pass -A (scripts do not set --account); see cluster/README.md.
+# Embedder grid: one model per array task (hansard_llm.embedder_grid, ST backend).
+# Setup: cluster/README.md. Always pass -A (no #SBATCH --account).
+# Submit from $HANSARD_SCRATCH/hansard so logs/ lands next to the repo.
 #
 #   sbatch -A gpu_<group>.prj cluster/embed_grid.sbatch
 #   sbatch -A gpu_<group>.prj --array=0 cluster/embed_grid.sbatch   # one model
 
 set -euo pipefail
 source ~/.config/hansard_llm.env
-source "$VENV_DIR/bin/activate"
+source "${VENV_DIR:?VENV_DIR unset — run cluster/01_setup_env.sh}/bin/activate"
 mkdir -p logs
 
+# Keep in sync with 02_download_models.sh EMBEDDERS and embedder_grid.EMBEDDERS.
 MODELS=(
   Qwen/Qwen3-Embedding-0.6B
   Qwen/Qwen3-Embedding-4B
