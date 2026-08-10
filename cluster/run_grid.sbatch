@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=hansard-grid
-#SBATCH --account=gpu_mills.prj
-#SBATCH --partition=gpu_a100_80gb 
+#SBATCH --partition=gpu_a100_80gb
 #SBATCH --gres=gpu:1
 #SBATCH --output=logs/%x-%j.out
 
 # Serve vLLM in the background, wait for health, run the panel experiment
 # against it via LLM_BASE_URL (client.py is OpenAI-compatible).
+# Always pass -A (scripts do not set --account); see cluster/README.md.
 #
-#   sbatch --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
+#   sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
 #          cluster/run_grid.sbatch
-#   sbatch --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" \
+#   sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" \
 #          cluster/run_grid.sbatch
-#   sbatch --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
-#VLLM_ARGS="--quantization fp8" cluster/run_grid.sbatch
+#   sbatch -A gpu_<group>.prj --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
+#          VLLM_ARGS="--quantization fp8" cluster/run_grid.sbatch
 #
 # MODEL (required) HF id from config.PANEL_MODELS / EXTENDED_MODELS;
 # RUN_ARGS extra flags for `python -m hansard_llm.panel` (e.g. --extended,

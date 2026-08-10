@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=embed-grid
-#SBATCH --account=gpu_mills.prj
 #SBATCH --partition=gpu_a100_80gb  # embedders <=8B fit 40GB
 #SBATCH --gres=gpu:1
 #SBATCH --array=0-7                # one task per embedder (see MODELS below)
@@ -8,8 +7,10 @@
 
 # Embedder grid: one model per array task, scoring the eval subset in all
 # representations x queries (hansard_llm/embedder_grid.py, local ST backend).
+# Always pass -A (scripts do not set --account); see cluster/README.md.
 #
-#   sbatch cluster/embed_grid.sbatch
+#   sbatch -A gpu_<group>.prj cluster/embed_grid.sbatch
+#   sbatch -A gpu_<group>.prj --array=0 cluster/embed_grid.sbatch   # one model
 
 set -euo pipefail
 source ~/.config/hansard_llm.env

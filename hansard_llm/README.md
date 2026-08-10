@@ -83,17 +83,18 @@ Gold and model-agreement analyses still use the main `panel2k` **`temp0`** rows.
 3. Cross-model sub-topic / taxonomy work.
 
 ```bash
-# Cluster — determinism first (smoke + timing; ~600 cells):
-sbatch --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507,RUN_ARGS="--determinism" \
+# Cluster — always pass -A (scripts do not set --account); see ../cluster/README.md
+# Determinism first (smoke + timing; ~600 cells):
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507,RUN_ARGS="--determinism" \
        cluster/run_grid.sbatch
-sbatch --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
 VLLM_ARGS="--quantization fp8",RUN_ARGS="--determinism" cluster/run_grid.sbatch
 
 # Then full panel (eval2k × 4 defs × temp0+temp07):
-sbatch --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 cluster/run_grid.sbatch
-sbatch --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,VLLM_ARGS="--quantization fp8" \
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 cluster/run_grid.sbatch
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,VLLM_ARGS="--quantization fp8" \
        cluster/run_grid.sbatch
-sbatch --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" cluster/run_grid.sbatch
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" cluster/run_grid.sbatch
 
 # Or against an already-running endpoint:
 export LLM_BASE_URL=… LLM_API_KEY=… LLM_BACKEND_NAME=vllm-…
@@ -126,7 +127,7 @@ representation**?
 | Store | `artifacts/llm/runs/embedder_grid/<run_id>/` (`scores_*.parquet` + manifest) |
 
 ```bash
-sbatch cluster/embed_grid.sbatch          # array 0–7, one embedder each
+sbatch -A gpu_<group>.prj cluster/embed_grid.sbatch   # array 0–7; one model: --array=N
 python -m hansard_llm.embedder_grid --list
 python -m hansard_llm.embedder_grid --model Qwen/Qwen3-Embedding-8B --backend st
 python -m hansard_llm.embedder_grid --diagnostics   # gold-free rank agreement / length bias

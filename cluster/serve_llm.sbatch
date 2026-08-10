@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=vllm-serve
-#SBATCH --account=gpu_mills.prj
 #SBATCH --partition=gpu_a100_80gb  # gpu_gh200_144gb once it's up (down 2026-08)
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=12
@@ -8,9 +7,10 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/%x-%j.out
 
-# Standalone server for interactive use; writes host:port for clients:
+# Standalone server for interactive use; writes host:port for clients.
+# Always pass -A (scripts do not set --account); see cluster/README.md.
 #
-#   sbatch --export=ALL,MODEL=google/gemma-3-27b-it cluster/serve_llm.sbatch
+#   sbatch -A gpu_<group>.prj --export=ALL,MODEL=google/gemma-3-27b-it cluster/serve_llm.sbatch
 #   export LLM_BASE_URL="http://$(cat logs/vllm-endpoint-<jobid>)/v1" LLM_API_KEY=local
 #
 # Sizing (80GB): <=32B bf16 -> gpu:1; Nemotron-49B -> VLLM_ARGS="--quantization fp8"

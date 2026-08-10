@@ -8,6 +8,26 @@ Cluster docs: <https://www.medsci.ox.ac.uk/for-staff/resources/bmrc>
 (esp. *GPU Resources 2026*, *Using the BMRC Cluster*, *Python on the BMRC
 Cluster*). Help: bmrc-help@medsci.ox.ac.uk — quote your job ID.
 
+## Submitting jobs (account is required)
+
+BMRC expects account on the **command line**. Our sbatch scripts set
+partition / GPU / array defaults only — they **do not** set `--account`.
+Type `-A gpu_<group>.prj` on every submit (substitute your group).
+
+```bash
+# Look up your account:
+sacctmgr show associations where user=$USER format=Account%-30,Partition%-20,QOS%-40
+
+# Pattern (matches BMRC docs):
+sbatch -A gpu_<group>.prj -p gpu_a100_80gb --gres=gpu:1 <SCRIPT>
+# Partition/--gres may be omitted when the script already has matching #SBATCH lines:
+sbatch -A gpu_<group>.prj cluster/embed_grid.sbatch
+```
+
+`/well/<group>` storage access ≠ Slurm GPU account. If submit fails with
+*Invalid account or account/partition combination*, you are not on that
+`gpu_*.prj` association — ask bmrc-help to add you.
+
 ## What you run here
 
 | Job | Script | Entry | Notes |
@@ -38,7 +58,7 @@ Templates pick x86 vs ARM venv via `uname -m`.
   `/well`; jobs run offline (`HF_HUB_OFFLINE` via env file).
 - **Storage**: `/well/<group>/users/<username>/` (`HANSARD_SCRATCH`); `$HOME`
   is tiny. Budget ~400GB.
-- **Accounts/QOS**: `-A gpu_<group>.prj` (sbatch files use `gpu_mills.prj`);
+- **Accounts/QOS**: always `-A gpu_<group>.prj` on `sbatch` / `srun`;
   `--qos gpu_bmrc_24hr` (or `_4hr`) for priority. Partition max 60h;
   project cap 24 GPUs; `gpu_interactive` for debugging.
 - **Login-node etiquette**: no heavy compute; LLM downloads in tmux/stages.
@@ -51,10 +71,10 @@ Templates pick x86 vs ARM venv via `uname -m`.
 | 2 | `01_setup_env.sh` | login | scratch + x86 venv + `~/.config/hansard_llm.env` |
 | 3 | upload | laptop | **required:** `eval2k_sample.parquet` → `$HANSARD_SCRATCH/artifacts/llm/`. Optional: `pilot_sample.parquet`, `legacy/`, Nebius `.env`, enriched parquet for new samples |
 | 4 | `02_download_models.sh` | login | `embedders` first (~20GB), then `llms` (panel + extended; **no 235B**). Gated: `hf auth login` (Gemma, Nemotron) |
-| 5 | `run_grid.sbatch` + `RUN_ARGS="--determinism"` | sbatch | **smoke + timing first** — see below |
-| 6 | `embed_grid.sbatch` | sbatch | embedder sensitivity on eval2k |
-| 7 | `run_grid.sbatch` | sbatch | one MODEL per job → full `panel2k` (or `--extended`) |
-| 8 | `serve_llm.sbatch` | sbatch | long-lived server if you want a separate client |
+| 5 | `run_grid.sbatch` + `RUN_ARGS="--determinism"` | sbatch `-A …` | **smoke + timing first** — see below |
+| 6 | `embed_grid.sbatch` | sbatch `-A …` | embedder sensitivity on eval2k |
+| 7 | `run_grid.sbatch` | sbatch `-A …` | one MODEL per job → full `panel2k` (or `--extended`) |
+| 8 | `serve_llm.sbatch` | sbatch `-A …` | long-lived server if you want a separate client |
 
 ## Sanity ladder (after steps 1–4)
 
@@ -66,7 +86,7 @@ cheap end-to-end smoke test **and** the throughput calibrator (~600 cells:
 # rung 1 — env (printed at end of 01 / 01b install): torch | vllm | cuda True
 
 # rung 2 — small in-process generate (use A100 until GH200 is up):
-srun -A gpu_mills.prj -p gpu_a100_80gb --gres=gpu:1 -t 15 --mem=32G bash -c '
+srun -A gpu_<group>.prj -p gpu_a100_80gb --gres=gpu:1 -t 15 --mem=32G bash -c '
   source ~/.config/hansard_llm.env; source "$VENV_DIR/bin/activate"
   python -c "
 from vllm import LLM, SamplingParams
@@ -74,7 +94,7 @@ llm = LLM(\"Qwen/Qwen3-4B-Instruct-2507\")
 print(llm.generate([\"Say hello.\"], SamplingParams(max_tokens=16))[0].outputs[0].text)"'
 
 # rung 3 — serve + panel path (cheap 4B path check):
-sbatch --export=ALL,MODEL=Qwen/Qwen3-4B-Instruct-2507,RUN_ARGS="--determinism" \
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-4B-Instruct-2507,RUN_ARGS="--determinism" \
        cluster/run_grid.sbatch
 
 # rung 4 — timing for each real panel model (same MODEL you will use in panel2k):
@@ -84,9 +104,9 @@ for m in \
   google/gemma-3-27b-it \
   Qwen/Qwen3-32B
 do
-  sbatch --export=ALL,MODEL="$m",RUN_ARGS="--determinism" cluster/run_grid.sbatch
+  sbatch -A gpu_<group>.prj --export=ALL,MODEL="$m",RUN_ARGS="--determinism" cluster/run_grid.sbatch
 done
-sbatch --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
 VLLM_ARGS="--quantization fp8",RUN_ARGS="--determinism" cluster/run_grid.sbatch
 ```
 
@@ -97,8 +117,8 @@ with `backend=vllm-…`. Only after rates look sane, submit the real grids.
 ## Submit the real grids
 
 ```bash
-# Embedders (array 0–7)
-sbatch cluster/embed_grid.sbatch
+# Embedders (array 0–7); one model: --array=0 … --array=7
+sbatch -A gpu_<group>.prj cluster/embed_grid.sbatch
 
 # Panel — one sbatch per model (default: eval2k × 4 defs × temp0+temp07)
 for m in \
@@ -106,17 +126,17 @@ for m in \
   google/gemma-3-27b-it \
   Qwen/Qwen3-32B
 do
-  sbatch --export=ALL,MODEL="$m" cluster/run_grid.sbatch
+  sbatch -A gpu_<group>.prj --export=ALL,MODEL="$m" cluster/run_grid.sbatch
 done
-sbatch --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,VLLM_ARGS="--quantization fp8" \
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,VLLM_ARGS="--quantization fp8" \
        cluster/run_grid.sbatch
 
 # Extended size axis (same eval2k speeches, separate experiment dir)
-sbatch --export=ALL,MODEL=Qwen/Qwen3-4B-Instruct-2507,RUN_ARGS="--extended" \
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-4B-Instruct-2507,RUN_ARGS="--extended" \
        cluster/run_grid.sbatch
-sbatch --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" \
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" \
        cluster/run_grid.sbatch
-sbatch --export=ALL,MODEL=mistralai/Mistral-Small-3.2-24B-Instruct-2506,RUN_ARGS="--extended" \
+sbatch -A gpu_<group>.prj --export=ALL,MODEL=mistralai/Mistral-Small-3.2-24B-Instruct-2506,RUN_ARGS="--extended" \
        cluster/run_grid.sbatch
 ```
 

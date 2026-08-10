@@ -4,7 +4,7 @@
 # only — a venv must be created by an ARM python, which exists only there.
 #
 #   bash cluster/01b_setup_env_gh200.sh download    # login node
-#   srun -A gpu_mills.prj -p gpu_gh200_144gb --gres=gpu:1 -t 30 --mem=32G \
+#   srun -A gpu_<group>.prj -p gpu_gh200_144gb --gres=gpu:1 -t 30 --mem=32G \
 #        bash cluster/01b_setup_env_gh200.sh install
 
 set -euo pipefail
