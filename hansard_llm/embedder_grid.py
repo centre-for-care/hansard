@@ -131,21 +131,41 @@ def grid_queries() -> dict[str, str]:
 # --------------------------------------------------------------------------
 # Backends
 # --------------------------------------------------------------------------
+def _default_st_batch(spec: EmbedderSpec) -> int:
+    """Encode batch for short inputs (queries, chunks). Always fine at 32."""
+    return 32
+
+
+def _whole_doc_batch(spec: EmbedderSpec, batch: int) -> int:
+    """Cap batch for whole-speech encodes on long-context models.
+
+    ST pads to the longest item in the batch; a few long Hansard speeches at
+    8k–32k ctx OOMs a 48GB card at batch=32. Chunks stay on ``batch`` (short).
+    """
+    if spec.max_tokens >= 16_000:
+        return min(batch, 4)
+    if spec.max_tokens >= 4_096:
+        return min(batch, 8)
+    return batch
+
+
 class STBackend:
     """Local sentence-transformers inference (cluster / workstation)."""
 
-    def __init__(self, spec: EmbedderSpec, batch: int = 32) -> None:
+    def __init__(self, spec: EmbedderSpec, batch: int | None = None) -> None:
         from sentence_transformers import SentenceTransformer
         self.spec = spec
-        self.batch = batch
+        self.batch = _default_st_batch(spec) if batch is None else batch
         self.model = SentenceTransformer(
             spec.model_id, trust_remote_code=spec.trust_remote_code)
         self.model.max_seq_length = min(self.model.max_seq_length or 10**9,
                                         spec.max_tokens)
 
-    def embed(self, texts: list[str], *, verbose: bool = False) -> np.ndarray:
+    def embed(self, texts: list[str], *, verbose: bool = False,
+              batch_size: int | None = None) -> np.ndarray:
         arr = self.model.encode(
-            texts, batch_size=self.batch, normalize_embeddings=True,
+            texts, batch_size=self.batch if batch_size is None else batch_size,
+            normalize_embeddings=True,
             show_progress_bar=verbose, convert_to_numpy=True)
         return arr.astype(np.float32)
 
@@ -160,16 +180,20 @@ class APIBackend:
         self._embed_texts = embed_texts
         self._client = make_client()
 
-    def embed(self, texts: list[str], *, verbose: bool = False) -> np.ndarray:
-        return self._embed_texts(texts, self._client, model=self.spec.model_id,
-                                 batch=self.batch, verbose=verbose)
+    def embed(self, texts: list[str], *, verbose: bool = False,
+              batch_size: int | None = None) -> np.ndarray:
+        return self._embed_texts(
+            texts, self._client, model=self.spec.model_id,
+            batch=self.batch if batch_size is None else batch_size,
+            verbose=verbose)
 
 
-def make_backend(spec: EmbedderSpec, backend: str):
+
+def make_backend(spec: EmbedderSpec, backend: str, *, batch: int | None = None):
     if backend == "st":
-        return STBackend(spec)
+        return STBackend(spec, batch=batch)
     if backend == "api":
-        return APIBackend(spec)
+        return APIBackend(spec, batch=batch if batch is not None else 64)
     raise ValueError(f"unknown backend {backend!r}")
 
 
@@ -183,6 +207,8 @@ def score_model(
     *,
     representations: tuple[str, ...] = REPRESENTATIONS,
     verbose: bool = True,
+    batch: int | None = None,
+    whole_batch: int | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """Long scores: speech_id x query_id x representation for one embedder,
     plus wall-clock timings (for extrapolating full-corpus embedding cost).
@@ -192,9 +218,11 @@ def score_model(
     document pass. Chunk arms call ``split_chunks`` (overlapping windows;
     scheme ``ch{max}o{overlap}``).
     """
-    be = make_backend(spec, backend_name)
+    be = make_backend(spec, backend_name, batch=batch)
     queries = grid_queries()
     doc_tpl = _DOC_TEMPLATE.get(spec.model_id, "{text}")
+    whole_bs = (whole_batch if whole_batch is not None
+                else _whole_doc_batch(spec, be.batch))
 
     qids = list(queries)
     Q = be.embed([spec.format_query(queries[q]) for q in qids])
@@ -204,6 +232,8 @@ def score_model(
 
     timings: dict = {
         "n_docs": len(texts),
+        "batch_size": be.batch,
+        "whole_batch_size": whole_bs,
         "chunk_scheme": _CHUNK_SCHEME,
         "chunk_max_chars": _CHUNK_MAX,
         "chunk_overlap_chars": _CHUNK_OVERLAP,
@@ -219,9 +249,11 @@ def score_model(
 
     if "whole" in representations:
         if verbose:
-            print(f"[{spec.model_id}] embedding {len(texts)} whole docs…")
+            print(f"[{spec.model_id}] embedding {len(texts)} whole docs "
+                  f"(batch={whole_bs})…")
         t0 = time.perf_counter()
-        D = be.embed([doc_tpl.format(text=t) for t in texts], verbose=verbose)
+        D = be.embed([doc_tpl.format(text=t) for t in texts], verbose=verbose,
+                     batch_size=whole_bs)
         timings["embed_whole_s"] = round(time.perf_counter() - t0, 2)
         emit("whole", D @ Q.T)
 
@@ -257,11 +289,14 @@ def score_model(
     return out, timings
 
 
-def run_model(model_id: str, backend: str, *, verbose: bool = True) -> Path:
+def run_model(model_id: str, backend: str, *, verbose: bool = True,
+              batch: int | None = None,
+              whole_batch: int | None = None) -> Path:
     """Score one embedder over the eval subset; write scores + manifest."""
     spec = EMBEDDERS_BY_ID[model_id]
     speeches = load_eval_sample()
-    scores, timings = score_model(spec, backend, speeches, verbose=verbose)
+    scores, timings = score_model(spec, backend, speeches, verbose=verbose,
+                                  batch=batch, whole_batch=whole_batch)
 
     try:  # record which GPU produced the timings — they don't transfer
         import torch
@@ -377,6 +412,11 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Embedder sensitivity grid")
     ap.add_argument("--model", help="HF id from the registry")
     ap.add_argument("--backend", choices=("st", "api"), default="st")
+    ap.add_argument("--batch", type=int, default=None,
+                    help="encode batch for chunks/queries (default 32)")
+    ap.add_argument("--whole-batch", type=int, default=None,
+                    help="batch for whole-doc encodes (default: min(batch,4) "
+                         "if ctx>=16k, min(batch,8) if ctx>=4k)")
     ap.add_argument("--list", action="store_true", help="list registry and exit")
     ap.add_argument("--diagnostics", action="store_true",
                     help="run gold-free cross-embedder diagnostics on all "
@@ -400,7 +440,8 @@ def main(argv: list[str] | None = None) -> None:
         ap.error("pass --model (see --list) or --diagnostics")
     if args.model not in EMBEDDERS_BY_ID:
         ap.error(f"{args.model} not in registry; see --list")
-    run_model(args.model, args.backend)
+    run_model(args.model, args.backend, batch=args.batch,
+              whole_batch=args.whole_batch)
 
 
 if __name__ == "__main__":

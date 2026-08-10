@@ -30,8 +30,11 @@ uv pip install -e "$REPO_DIR"
 
 CFG="$HOME/.config/hansard_llm.arc.env"
 mkdir -p "$(dirname "$CFG")"
+# Same module used to build the venv — needed so libpython3.11.so is found in jobs.
+PYTHON_MODULE="${PYTHON_MODULE:-Python/3.11.3-GCCcore-12.3.0}"
 cat > "$CFG" <<EOF
 # Sourced by cluster/arc/*.sbatch. Distinct from BMRC ~/.config/hansard_llm.env.
+type module >/dev/null 2>&1 && module load $PYTHON_MODULE 2>/dev/null || true
 export HANSARD_SCRATCH="$SCRATCH_DIR"
 export HF_HOME="$SCRATCH_DIR/hf_cache"
 export UV_CACHE_DIR="$SCRATCH_DIR/.uv-cache"
@@ -45,4 +48,4 @@ EOF
 echo "wrote $CFG"
 
 echo "env ready: source ~/.config/hansard_llm.arc.env && source \"\$VENV_DIR/bin/activate\""
-python -c "import vllm, hansard_llm; print('vllm', vllm.__version__)"
+python -c "import numpy, vllm, hansard_llm; print('ok', 'vllm', vllm.__version__)"

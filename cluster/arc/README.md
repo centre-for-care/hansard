@@ -21,10 +21,17 @@ Experiment design: [`../../hansard_llm/README.md`](../../hansard_llm/README.md).
 | Login | `ssh <user>@htc-login.arc.ox.ac.uk` (Oxford net / VPN). From outside: often `gateway.arc.ox.ac.uk` first. |
 | Disk | Persistent project root: **`$DATA/hansard_root`** (under `/data/<project>/$USER`, ~5 TiB). `$HOME` is ~15 GiB. |
 | Job temp (not our root) | ARC’s **`$SCRATCH` / `$TMPDIR`** are per-job and deleted on exit — unrelated to `hansard_root`. Do not put the venv or HF cache there. |
-| Builds | Not on the login node — use `srun -p interactive --pty /bin/bash` (or `--clusters=htc`). |
+| Builds (CPU) | Not on the login node — `srun -p interactive --pty /bin/bash` (or `--clusters=htc`). |
 | GPUs | Only on **htc**. Partitions are time-based (`short` ≤12h, `medium` ≤48h, `long`). |
 
 **GPU choice (queue vs VRAM):** A100s are scarce (~16). Prefer **L40S** (~92, also on medium/long) for embedders; **H100** for larger LLMs but H100 nodes are on **`short` only** (≤12h). See [ARC systems / GPUs](https://arc-user-guide.readthedocs.io/en/latest/arc-systems.html#gpu-resources).
+
+**Do not GPU-smoke on `-p interactive`:** that partition is **V100-only** (CC 7.0). Torch shipped with current vLLM needs CC ≥7.5 → `CUDA error: no kernel image…`. For a real GPU shell matching embed jobs:
+
+```bash
+srun --clusters=htc -p short --gres=gpu:1 --constraint='gpu_sku:L40S' \
+  --time=1:00:00 --pty /bin/bash
+```
 
 Check: `echo $DATA`; `myquota`.
 
@@ -66,13 +73,17 @@ Submit jobs from this directory so `cluster/arc/….sbatch` and `logs/` resolve.
 
 ## 3. Setup script (interactive node)
 
+System Python is often 3.9 — too old (`requires-python >=3.11`). Load 3.11 first:
+
 ```bash
 srun --clusters=htc -p interactive --pty /bin/bash
+module load Python/3.11.3-GCCcore-12.3.0
+python3 --version   # must be 3.11.x
 cd "$HANSARD_SCRATCH/hansard"
-HANSARD_SCRATCH="$HANSARD_SCRATCH" bash cluster/arc/01_setup_env.sh
+bash cluster/arc/01_setup_env.sh
 ```
 
-Writes `~/.config/hansard_llm.arc.env` and creates the venv. Does not mkdir/clone.
+Writes `~/.config/hansard_llm.arc.env` (includes the same `module load`) and creates the venv. Does not mkdir/clone.
 
 **Activate (interactive):**
 
