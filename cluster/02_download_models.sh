@@ -3,8 +3,9 @@
 # have no internet); use tmux for the LLM batch. Idempotent/resumable.
 # Gated models (Gemma, Nemotron) need `hf auth login` once.
 #
-# Prerequisites (cluster/README.md §§3–5):
-#   source ~/.config/hansard_llm.env
+# Prerequisites (cluster/README.md or cluster/arc/README.md):
+#   source ~/.config/hansard_llm.env          # BMRC
+#   # or: source ~/.config/hansard_llm.arc.env  # ARC
 #   source "$VENV_DIR/bin/activate"
 #   bash cluster/02_download_models.sh [embedders|llms|all|<hf-model-id>...]
 

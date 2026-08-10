@@ -4,6 +4,9 @@ One linear path: mkdir → clone → setup script → upload data → download
 models → `sbatch`. Experiment design:
 [`../hansard_llm/README.md`](../hansard_llm/README.md).
 
+**Oxford ARC (HTC) instead?** Use [`arc/README.md`](arc/README.md) — separate
+sbatch + `~/.config/hansard_llm.arc.env` so BMRC and ARC do not collide.
+
 Cluster docs: <https://www.medsci.ox.ac.uk/for-staff/resources/bmrc>
 (esp. *GPU Resources 2026*, *Using the BMRC Cluster*, *Python on the BMRC
 Cluster*). Help: bmrc-help@medsci.ox.ac.uk — quote your job ID.

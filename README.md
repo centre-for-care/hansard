@@ -20,7 +20,7 @@ Data and run artifacts live **outside this repo** in a sibling checkout
 | Directory | What it is | Details |
 |---|---|---|
 | [hansard_llm/](hansard_llm/) | The main Python package: stratified sampling, prompt-grid LLM extraction, embedding retrieval, robustness metrics, report builders (`docs/`). | [hansard_llm/README.md](hansard_llm/README.md) |
-| [cluster/](cluster/) | SLURM scripts for the Oxford BMRC cluster: env setup, model downloads, sbatch jobs for the embedder grid and vLLM-served LLM grid. | [cluster/README.md](cluster/README.md) |
+| [cluster/](cluster/) | SLURM scripts for Oxford BMRC (`cluster/`) and ARC HTC (`cluster/arc/`). | [cluster/README.md](cluster/README.md), [cluster/arc/README.md](cluster/arc/README.md) |
 | [scrapers/](scrapers/) | Standalone CLI scripts that built the corpus and speaker metadata. Numbered by execution order; run rarely (re-scrapes only). | below |
 | [scripts/](scripts/) | One-off verification/maintenance scripts (migration checks, cache verification). | docstrings in each |
 | [tests/](tests/) | Pytest suite guarding past bugs: output parsing, results-store cache keys, era binning. Run `python -m pytest tests/ -q`. | |
