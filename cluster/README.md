@@ -22,11 +22,7 @@ Cluster*). Help: bmrc-help@medsci.ox.ac.uk — quote your job ID.
 
 ## Placement strategy
 
-- **LLM serving → `gpu_gh200_144gb`** once the partition is up (discovery
-  2026-08-03: administratively DOWN). On 144GB every panel model including
-  Nemotron-49B fits **bf16 on one card** (no FP8). GH200 = ARM →
-  `01b_setup_env_gh200.sh` (steps 2b/2c).
-- **Until then: LLM → `gpu_a100_80gb`** (current `run_grid` / `serve_llm`
+- **LLM serving → `gpu_a100_80gb`** (current `run_grid` / `serve_llm`
   default). Nemotron needs FP8 as above; other panel models fit bf16.
 - **Embedders → prefer `gpu_a100_40gb` / RTX 48GB** when available (≤8B);
   current `embed_grid.sbatch` still requests `gpu_a100_80gb` — edit the
@@ -45,9 +41,6 @@ Templates pick x86 vs ARM venv via `uname -m`.
 - **Accounts/QOS**: `-A gpu_<group>.prj` (sbatch files use `gpu_mills.prj`);
   `--qos gpu_bmrc_24hr` (or `_4hr`) for priority. Partition max 60h;
   project cap 24 GPUs; `gpu_interactive` for debugging.
-- **Data transfer**: FileZilla SFTP to `cluster2.bmrc.ox.ac.uk` (1 connection,
-  600s timeout) or rsync from WSL with `ControlMaster`; Globus `bmrc#upload23`
-  for large transfers.
 - **Login-node etiquette**: no heavy compute; LLM downloads in tmux/stages.
 
 ## Order of operations
@@ -56,7 +49,6 @@ Templates pick x86 vs ARM venv via `uname -m`.
 |------|--------|-------|-------|
 | 1 | `00_discovery.sh` | login | quota, queues, modules |
 | 2 | `01_setup_env.sh` | login | scratch + x86 venv + `~/.config/hansard_llm.env` |
-| 2b/2c | `01b_setup_env_gh200.sh` | login then GH200 | ARM venv — only when GH200 partition is up |
 | 3 | upload | laptop | **required:** `eval2k_sample.parquet` → `$HANSARD_SCRATCH/artifacts/llm/`. Optional: `pilot_sample.parquet`, `legacy/`, Nebius `.env`, enriched parquet for new samples |
 | 4 | `02_download_models.sh` | login | `embedders` first (~20GB), then `llms` (panel + extended; **no 235B**). Gated: `hf auth login` (Gemma, Nemotron) |
 | 5 | `run_grid.sbatch` + `RUN_ARGS="--determinism"` | sbatch | **smoke + timing first** — see below |
