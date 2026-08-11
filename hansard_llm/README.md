@@ -113,34 +113,48 @@ Deferred: `REFERENCE_MODELS` (Qwen3-235B — not downloaded / not in default pla
 
 ## 2. Embedder grid (retrieval sensitivity)
 
-Does ranking change with **embedder**, **query wording**, and **document
-representation**?
+**Why.** We retrieve by embedding a *construct definition* as the query and
+ranking speeches by cosine similarity. Anything that changes those vectors —
+which embedder, how the query is worded, how a long speech is represented —
+can change scores and therefore **which documents rise to the top**. The grid
+asks whether those choices matter on the shared `eval2k` set before we lock a
+shipping retrieval recipe.
 
-| Axis | Levels |
-|------|--------|
-| Model | 8 embedders in `embedder_grid.EMBEDDERS` (Qwen3 0.6B/4B/8B size axis; BGE base/large; GTE-large; E5-large; Nomic v1.5) |
-| Representation | `whole` / `maxchunk` / `meanchunk` (chunks from `retrieve.split_chunks`) |
-| Query | same ids as `PANEL_DEFINITIONS` |
-| Speeches | same `eval2k_sample.parquet` |
-| Backend | `st` (sentence-transformers, cluster) or `api` (OpenAI-compatible embeddings) |
-| Store | `artifacts/llm/runs/embedder_grid/<run_id>/` (`scores_*.parquet` + manifest) |
+**What one run does.** For one model (+ backend), embed the four panel
+definition texts and all eval speeches, write cosine scores for every
+speech × query × representation. Docs are embedded once per representation;
+extra queries are cheap (`D @ Q.T`). Output:
+`artifacts/llm/runs/embedder_grid/<run_id>/` (`scores_*.parquet` + manifest).
+No gold in this step — only scores.
+
+| Axis | Levels | Why vary it |
+|------|--------|-------------|
+| Model | `embedder_grid.EMBEDDERS`: Qwen3 0.6B/4B/8B (size); BGE base/large; GTE-large; E5-large; Nomic v1.5 (family) | Different models / sizes induce different geometries → different rankings |
+| Representation | `whole` / `maxchunk` / `meanchunk` (`retrieve.split_chunks`) | Whole = one vector (truncated by model ctx). Maxchunk = best chunk vs query (mechanically length-biased). Meanchunk = control |
+| Query | same ids as `PANEL_DEFINITIONS` | Definition wording is the query; LODO gold later avoids scoring a def against labels from that same wording |
+| Speeches | `eval2k_sample.parquet` | Same pool as the panel |
+| Backend | `st` (sentence-transformers, cluster) or `api` (OpenAI-compatible embeddings) | Cluster path vs serving-stack parity |
+
+**Gold-free checks** (`--diagnostics`): rank agreement (Spearman + overlap@k on
+`expert_hc_sc` / whole) — do embedders disagree enough that the axis is live?
+Length bias (corr(score, log word_count)) — is maxchunk (or whole) tangled with
+speech length? If rankings barely move, sensitivity is settled without labels;
+if they diverge, panel gold decides who is right.
+
+**Eval against LLM gold (LODO):** once `panel2k` exists,
+`retrieve.gold_for_query` / `panel.panel_gold(exclude_definition=…)` and
+`retrieve.evaluate_all` (pilot majority until panel rows exist).
 
 ```bash
+# BMRC: ../cluster/README.md — ARC: ../cluster/arc/README.md
 sbatch -A gpu_<group>.prj cluster/embed_grid.sbatch   # array 0–7; one model: --array=N
 python -m hansard_llm.embedder_grid --list
-python -m hansard_llm.embedder_grid --model Qwen/Qwen3-Embedding-8B --backend st
-python -m hansard_llm.embedder_grid --diagnostics   # gold-free rank agreement / length bias
+python -m hansard_llm.embedder_grid --model BAAI/bge-base-en-v1.5 --backend st
+python -m hansard_llm.embedder_grid --diagnostics   # stdout; tee to save
 ```
 
-**Eval against LLM gold (LODO):** once `panel2k` exists, score each query with
-`retrieve.gold_for_query(qid)` / `panel.panel_gold(exclude_definition=qid)` so a
-definition is never scored against labels produced from that same wording.
-`retrieve.evaluate_all` does this per query when panel rows are available
-(falls back to pilot majority until then).
-
-Related: `python -m hansard_llm.retrieve` — earlier pilot/filter-pool embedding
-path (whole + maxchunk, keyword baseline, spot-check). Prefer the embedder grid
-+ panel LODO for the eval-subset sensitivity study.
+Related: `python -m hansard_llm.retrieve` is the older pilot/filter-pool path.
+Prefer this grid + panel LODO for the eval-subset study.
 
 ---
 

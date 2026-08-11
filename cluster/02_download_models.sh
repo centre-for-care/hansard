@@ -40,7 +40,6 @@ LLMS=(
   Qwen/Qwen3-32B
   Qwen/Qwen3-14B
   Qwen/Qwen3-4B-Instruct-2507
-  mistralai/Mistral-Small-3.2-24B-Instruct-2506
 )
 
 dl() { for m in "$@"; do echo "== $m"; hf download "$m" && echo "   ok"; done; }
