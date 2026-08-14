@@ -45,7 +45,8 @@ uv venv "$ENV_DIR" --python "$(command -v python3)"
 source "$ENV_DIR/bin/activate"
 
 # sentence-transformers <5.6: 5.6 pulls torchcodec -> FFmpeg >=6.1; BMRC has 6.0.
-uv pip install vllm 'sentence-transformers~=5.1.0' huggingface_hub
+# vLLM >=0.24 needs transformers>=5.5.3; ST 5.1 still pulls v4 unless we pin.
+uv pip install vllm 'transformers>=5.5.3' 'sentence-transformers~=5.1.0' huggingface_hub
 uv pip install -e "$REPO_DIR"
 
 CFG="$HOME/.config/hansard_llm.env"

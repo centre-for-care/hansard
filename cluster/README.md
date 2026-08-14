@@ -144,6 +144,7 @@ CLI if needed (`-p`, `--gres`, `--array`). Invalid account → ask bmrc-help.
 | Panel smoke / timing | same + `,RUN_ARGS="--determinism"` |
 | Extended size axis | same + `,RUN_ARGS="--extended"` |
 | Nemotron on A100-80GB | add `VLLM_ARGS="--quantization fp8"` to `--export` |
+| vLLM context cap | `MAX_MODEL_LEN` (default **32768** in the sbatch; Qwen native 262k OOMs KV cache) |
 | vLLM only | `sbatch -A gpu_<group>.prj --export=ALL,MODEL=<hf-id> cluster/serve_llm.sbatch` |
 
 Every job script: `source ~/.config/hansard_llm.env` → activate venv → run
