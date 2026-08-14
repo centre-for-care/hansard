@@ -1,0 +1,22 @@
+{
+  "created_ts": 1785708056.8833284,
+  "created_iso": "2026-08-02T23:00:56+0100",
+  "git_sha": "f828b4b-dirty",
+  "backend": "api.tokenfactory.us-central1.nebius.com",
+  "base_url_host": "api.tokenfactory.us-central1.nebius.com",
+  "artifact": "taxonomy_clusters.csv",
+  "arm": {
+    "definition": "expert_hc_sc",
+    "task": "v1_nocap",
+    "output_format": "json",
+    "role": "none",
+    "condition": "temp0"
+  },
+  "pool": "pilot",
+  "distance_threshold": 0.25,
+  "min_cluster": 2,
+  "n_clusters": 285,
+  "n_phrases": 1412,
+  "n_emissions": 1673,
+  "embed_model": "Qwen/Qwen3-Embedding-8B"
+}
