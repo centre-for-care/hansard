@@ -15,7 +15,7 @@
 #          --export=ALL,MODEL=Qwen/Qwen3-14B,RUN_ARGS="--extended" cluster/run_grid.sbatch
 #   sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr \
 #          --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
-#          VLLM_ARGS="--quantization fp8" cluster/run_grid.sbatch
+#          VLLM_ARGS="--quantization fp8 --trust-remote-code" cluster/run_grid.sbatch
 #
 # MODEL (required); RUN_ARGS (--extended, --determinism); VLLM_ARGS; PORT; WORKERS;
 # MAX_MODEL_LEN (default 32768 — Qwen native 262k OOMs KV cache on 80GB).
@@ -29,6 +29,11 @@ else
 fi
 mkdir -p logs
 
+# A100 enables FlashInfer; vLLM then JIT-compiles the sampler and needs nvcc.
+# BMRC nodes have the driver, not /usr/local/cuda. The 4B interactive run
+# skipped this because RTX 6000 is CC 7.5. Native sampler is fine.
+export VLLM_USE_FLASHINFER_SAMPLER=0
+
 MODEL="${MODEL:?export MODEL=<hf model id>}"
 PORT="${PORT:-$((8000 + RANDOM % 1000))}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-32768}"
@@ -36,7 +41,7 @@ HOST=$(hostname -s)
 
 echo "serving $MODEL on $HOST:$PORT (max-model-len $MAX_MODEL_LEN)"
 vllm serve "$MODEL" --port "$PORT" --host 0.0.0.0 \
-    --max-model-len "$MAX_MODEL_LEN" \
+    --max-model-len "$MAX_MODEL_LEN" --trust-remote-code \
     ${VLLM_ARGS:-} > "logs/vllm-$SLURM_JOB_ID.log" 2>&1 &
 VLLM_PID=$!
 

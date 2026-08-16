@@ -114,8 +114,8 @@ Deferred: `REFERENCE_MODELS` (Qwen3-235B — not downloaded / not in default pla
 ## 2. Embedder grid (retrieval sensitivity)
 
 **Why.** We retrieve by embedding a *construct definition* as the query and
-ranking speeches by cosine similarity. Anything that changes those vectors —
-which embedder, how the query is worded, how a long speech is represented —
+ranking speeches by cosine similarity. Anything that changes those vectors 
+(which embedder, how the query is worded, how a long speech is represented)
 can change scores and therefore **which documents rise to the top**. The grid
 asks whether those choices matter on the shared `eval2k` set before we lock a
 shipping retrieval recipe.

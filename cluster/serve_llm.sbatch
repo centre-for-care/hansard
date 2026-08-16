@@ -26,10 +26,12 @@ else
 fi
 mkdir -p logs
 
+export VLLM_USE_FLASHINFER_SAMPLER=0
+
 MODEL="${MODEL:?export MODEL=<hf model id>}"
 PORT="${PORT:-$((8000 + RANDOM % 1000))}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-32768}"
 echo "$(hostname -s):$PORT" > "logs/vllm-endpoint-$SLURM_JOB_ID"
 
 exec vllm serve "$MODEL" --port "$PORT" --host 0.0.0.0 \
-    --max-model-len "$MAX_MODEL_LEN" ${VLLM_ARGS:-}
+    --max-model-len "$MAX_MODEL_LEN" --trust-remote-code ${VLLM_ARGS:-}
