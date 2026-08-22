@@ -77,7 +77,8 @@ def _variants():
         topics, roles=("none",), formats=("json",), task=TASK_UNCAPPED)
 
 
-def panel_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
+def panel_plan(model: ModelSpec, *, max_workers: int = 32,
+               max_tokens: int | None = None) -> run.RunPlan:
     """RunPlan for one model on the full ~2k eval subset."""
     return run.RunPlan(
         speeches=_eval_speeches(),
@@ -87,10 +88,12 @@ def panel_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
         conditions=PANEL_CONDITIONS,
         max_workers=max_workers,
         pool=POOL,
+        max_tokens=max_tokens,
     )
 
 
-def determinism_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
+def determinism_plan(model: ModelSpec, *, max_workers: int = 32,
+                     max_tokens: int | None = None) -> run.RunPlan:
     """RunPlan for the temp-0 repeat add-on (one definition, DETERMINISM_N speeches)."""
     return run.RunPlan(
         speeches=_eval_speeches(DETERMINISM_N),
@@ -100,6 +103,7 @@ def determinism_plan(model: ModelSpec, *, max_workers: int = 32) -> run.RunPlan:
         conditions=(DET_CONDITION,),
         max_workers=max_workers,
         pool=POOL,
+        max_tokens=max_tokens,
     )
 
 
@@ -207,6 +211,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--determinism", action="store_true",
                     help="run the temp-0 repeat add-on instead of the panel")
     ap.add_argument("--workers", type=int, default=32)
+    ap.add_argument("--max-tokens", type=int, default=None,
+                    help="completion budget (overrides ModelSpec / uncapped 1024). "
+                         "Reasoning models already use spec.max_tokens (4096) "
+                         "unless this is set")
+    ap.add_argument("--rerun", action="store_true",
+                    help="ignore the experiment cache and rewrite every cell "
+                         "in this plan (needed after a truncated think-mode run)")
     ap.add_argument("--report", action="store_true",
                     help="print agreement + determinism reports from stored "
                          "runs and exit")
@@ -234,12 +245,19 @@ def main(argv: list[str] | None = None) -> None:
                  f"{sorted(config.MODELS_BY_ID)}")
 
     if args.determinism:
-        plan, experiment = determinism_plan(spec, max_workers=args.workers), EXPERIMENT_DET
+        plan, experiment = determinism_plan(
+            spec, max_workers=args.workers,
+            max_tokens=args.max_tokens), EXPERIMENT_DET
     elif args.extended:
-        plan, experiment = panel_plan(spec, max_workers=args.workers), EXPERIMENT_EXT
+        plan, experiment = panel_plan(
+            spec, max_workers=args.workers,
+            max_tokens=args.max_tokens), EXPERIMENT_EXT
     else:
-        plan, experiment = panel_plan(spec, max_workers=args.workers), EXPERIMENT
-    n = run.execute(plan, experiment=experiment, cli_args=vars(args))
+        plan, experiment = panel_plan(
+            spec, max_workers=args.workers,
+            max_tokens=args.max_tokens), EXPERIMENT
+    n = run.execute(plan, experiment=experiment, cli_args=vars(args),
+                    rerun=args.rerun)
     print(f"wrote {n} new cells")
 
 

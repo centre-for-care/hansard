@@ -83,6 +83,8 @@ class RunPlan:
     conditions: tuple[Condition, ...] = (CORE,)
     max_workers: int = 16
     pool: str = "pilot"
+    # None = per-cell default (see ``completion_budget``). Set from --max-tokens.
+    max_tokens: int | None = None
 
 
 def _cache_key(speech_id, prompt_hash, model_id, temperature, seed, rep) -> str:
@@ -131,6 +133,26 @@ def _experiment_done_keys(experiment: str, *,
     return done
 
 
+def completion_budget(
+    model: ModelSpec,
+    *,
+    task: str,
+    override: int | None = None,
+) -> int:
+    """Token budget for one cell.
+
+    ``--max-tokens`` wins when set. Otherwise an uncapped prompt uses
+    ``UNCAPPED_MAX_TOKENS`` so long JSON lists are not cut at the 512 CORE
+    default, but that floor must not *shrink* a reasoning model's think
+    budget (``ModelSpec.max_tokens``).
+    """
+    if override is not None:
+        return override
+    if task == TASK_UNCAPPED:
+        return max(UNCAPPED_MAX_TOKENS, model.max_tokens)
+    return model.max_tokens
+
+
 @dataclass
 class _Job:
     speech_id: int
@@ -158,10 +180,12 @@ def _build_jobs(plan: RunPlan, done: set[str]) -> list[_Job]:
     return jobs
 
 
-def _run_one(client: LLMClient, job: _Job, topic: Topic) -> dict:
+def _run_one(client: LLMClient, job: _Job, topic: Topic,
+             max_tokens: int | None = None) -> dict:
     msgs = job.variant.render(job.speech_text)
     uncapped = job.variant.task == TASK_UNCAPPED
-    max_tokens = UNCAPPED_MAX_TOKENS if uncapped else None  # None -> model default
+    budget = completion_budget(
+        job.model, task=job.variant.task, override=max_tokens)
     # Read the cap off the variant's own topic, not the plan's: a definition
     # arm puts several Topic objects in one plan, and only the variant knows
     # which one produced this cell.
@@ -169,7 +193,7 @@ def _run_one(client: LLMClient, job: _Job, topic: Topic) -> dict:
     res = client.complete(
         msgs, job.model,
         temperature=job.cond.temperature, seed=job.cond.seed,
-        max_tokens=max_tokens,
+        max_tokens=budget,
     )
     ex = (schema.parse(res.text, job.variant.output_format, parse_n)
           if res.text is not None
@@ -217,8 +241,10 @@ def _write_run_manifest(plan: RunPlan, *, experiment: str, run_id: str,
         "pool": plan.pool,
         "n_speeches": int(plan.speeches["speech_id"].nunique()),
         "models": [{"model_id": m.model_id, "family": m.family,
-                    "tier": m.tier, "reasoning": m.reasoning}
+                    "tier": m.tier, "reasoning": m.reasoning,
+                    "max_tokens": m.max_tokens}
                    for m in plan.models],
+        "max_tokens_override": plan.max_tokens,
         "conditions": [{"label": c.label, "temperature": c.temperature,
                         "seed": c.seed, "n_reps": c.n_reps}
                        for c in plan.conditions],
@@ -233,7 +259,8 @@ def _write_run_manifest(plan: RunPlan, *, experiment: str, run_id: str,
 
 def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
             include_legacy_cache: bool = True,
-            cli_args: dict | None = None) -> int:
+            cli_args: dict | None = None,
+            rerun: bool = False) -> int:
     """Run all not-yet-cached cells in ``plan`` under a fresh run directory
     ``runs/<experiment>/<run_id>/``. Returns the number of new cells written.
 
@@ -242,9 +269,12 @@ def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
     that are genuinely missing. Each invocation that has work to do creates its
     own run directory with a manifest; an invocation with nothing to do
     creates nothing.
+
+    ``rerun=True`` ignores the cache and rewrites every cell in ``plan`` (a
+    new run directory). ``load_experiment`` keeps the latest row per cache key.
     """
-    done = _experiment_done_keys(experiment,
-                                 include_legacy=include_legacy_cache)
+    done: set[str] = set() if rerun else _experiment_done_keys(
+        experiment, include_legacy=include_legacy_cache)
     jobs = _build_jobs(plan, done)
     total = len(jobs)
     if verbose:
@@ -275,7 +305,8 @@ def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
 
     with log_path.open("a", encoding="utf-8") as fh, \
             ThreadPoolExecutor(max_workers=plan.max_workers) as pool:
-        futs = {pool.submit(_run_one, client, j, plan.topic): j for j in jobs}
+        futs = {pool.submit(_run_one, client, j, plan.topic,
+                            plan.max_tokens): j for j in jobs}
         for fut in as_completed(futs):
             row = {**fut.result(), **extras}
             with write_lock:
@@ -354,13 +385,19 @@ def load_results(log_path: Path = RESULTS_LOG, *, to_parquet: bool = False,
 
 
 def load_experiment(experiment: str, *, reparse: bool = True) -> pd.DataFrame:
-    """Concatenate every run of an experiment from the versioned store."""
+    """Concatenate every run of an experiment from the versioned store.
+
+    If the same cache key was rewritten (``--rerun``), the latest row wins.
+    """
     logs = _experiment_logs(experiment)
     if not logs:
         raise FileNotFoundError(
             f"No runs for experiment {experiment!r} under {config.RUNS_DIR}")
     frames = [load_results(p, reparse=False) for p in logs]
     df = pd.concat(frames, ignore_index=True)
+    key_cols = ["speech_id", "prompt_hash", "model_id", "temperature", "seed", "rep"]
+    if all(c in df.columns for c in key_cols):
+        df = df.drop_duplicates(key_cols, keep="last")
     if reparse:
         df = reparse_results(df)
     return df

@@ -112,7 +112,12 @@ class LLMClient:
                 )
             else:
                 msg = resp.choices[0].message
-                reasoning = (msg.model_extra or {}).get("reasoning")
+                extra = msg.model_extra or {}
+                reasoning = (
+                    getattr(msg, "reasoning_content", None)
+                    or extra.get("reasoning_content")
+                    or extra.get("reasoning")
+                )
                 usage = resp.usage
                 return CallResult(
                     model_id=model.model_id,

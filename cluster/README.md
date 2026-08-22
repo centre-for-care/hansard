@@ -117,11 +117,13 @@ source "$VENV_DIR/bin/activate"
 # script unsets HF_HUB_OFFLINE for you
 bash cluster/02_download_models.sh embedders   # ~20GB — do this first
 bash cluster/02_download_models.sh llms        # panel + extended; not 235B
+bash cluster/02_download_models.sh thinkers    # Qwen3.6 / Nemotron-Nano / Gemma-4 MoE
 # or: bash cluster/02_download_models.sh all
 # or: bash cluster/02_download_models.sh Qwen/Qwen3-Embedding-0.6B
 ```
 
 Gated models (Gemma, Nemotron): `hf auth login` once beforehand.
+Thinking MoEs (~180GB BF16): run `thinkers` under `tmux` on the login node.
 
 ---
 

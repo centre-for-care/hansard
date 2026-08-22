@@ -7,7 +7,7 @@
 #   source ~/.config/hansard_llm.env          # BMRC
 #   # or: source ~/.config/hansard_llm.arc.env  # ARC
 #   source "$VENV_DIR/bin/activate"
-#   bash cluster/02_download_models.sh [embedders|llms|all|<hf-model-id>...]
+#   bash cluster/02_download_models.sh [embedders|llms|thinkers|all|<hf-model-id>...]
 
 set -euo pipefail
 WHAT="${1:-all}"
@@ -42,13 +42,23 @@ LLMS=(
   Qwen/Qwen3-4B-Instruct-2507
 )
 
+# Thinking MoEs for a single A100-80GB. Gemma 4 + Nemotron Nano are gated.
+# Qwen3.6 BF16 is tight on 80GB (~70GB weights); if serve OOMs, also pull
+# Qwen/Qwen3.6-35B-A3B-FP8 and point MODEL at that id.
+THINKERS=(
+  Qwen/Qwen3.6-35B-A3B
+  nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+  google/gemma-4-26B-A4B-it
+)
+
 dl() { for m in "$@"; do echo "== $m"; hf download "$m" && echo "   ok"; done; }
 
 case "$WHAT" in
   embedders) dl "${EMBEDDERS[@]}" ;;
   llms)      dl "${LLMS[@]}" ;;
-  all)       dl "${EMBEDDERS[@]}"; dl "${LLMS[@]}" ;;
-  -h|--help) echo "usage: $0 [embedders|llms|all|<hf-model-id>...]"; exit 0 ;;
+  thinkers)  dl "${THINKERS[@]}" ;;
+  all)       dl "${EMBEDDERS[@]}"; dl "${LLMS[@]}"; dl "${THINKERS[@]}" ;;
+  -h|--help) echo "usage: $0 [embedders|llms|thinkers|all|<hf-model-id>...]"; exit 0 ;;
   *)         dl "$@" ;;
 esac
 

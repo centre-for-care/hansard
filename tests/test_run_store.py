@@ -57,6 +57,36 @@ def test_reparse_results_recomputes_from_raw_text():
     assert "presence_inferred" in out.columns and "subthemes_raw" in out.columns
 
 
+def test_completion_budget_uncapped_does_not_shrink_reasoning():
+    from hansard_llm.config import ModelSpec
+    from hansard_llm.prompts import TASK_UNCAPPED
+
+    core = ModelSpec("x/core", family="qwen", max_tokens=512)
+    think = ModelSpec("x/think", family="qwen", reasoning=True, max_tokens=4096)
+    assert run.completion_budget(core, task=TASK_UNCAPPED) == 1024
+    assert run.completion_budget(think, task=TASK_UNCAPPED) == 4096
+    assert run.completion_budget(think, task=TASK_UNCAPPED, override=8192) == 8192
+    assert run.completion_budget(think, task="v1") == 4096
+
+
+def test_load_experiment_keeps_latest_duplicate(tmp_path, monkeypatch):
+    runs = tmp_path / "runs"
+    monkeypatch.setattr(config, "RUNS_DIR", runs)
+    key = {"speech_id": 1, "prompt_hash": "h", "model_id": "m",
+           "temperature": 0.0, "seed": 42, "rep": 0,
+           "raw_text": '{"mentions_topic": false}',
+           "output_format": "json", "task": "v1", "error": None}
+    for rid, text in (("r1", "old"), ("r2", "new")):
+        d = runs / "exp" / rid
+        d.mkdir(parents=True)
+        row = {**key, "raw_text": json.dumps({"mentions_topic": text == "new",
+                                              "subthemes": [text]})}
+        (d / "results.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    df = run.load_experiment("exp", reparse=False)
+    assert len(df) == 1
+    assert json.loads(df.iloc[0]["raw_text"])["subthemes"] == ["new"]
+
+
 def test_uncapped_reparse_not_retruncated():
     subs = [f"t{i}" for i in range(12)]
     raw = json.dumps({"mentions_topic": True, "subthemes": subs})

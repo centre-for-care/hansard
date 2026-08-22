@@ -132,9 +132,16 @@ REFERENCE_MODELS: tuple[ModelSpec, ...] = (
               tier="reference"),
 )
 
-# Reasoning-class models, available but deferred to a separate axis. They need
-# a much larger budget because the reasoning trace consumes tokens first.
+# Reasoning-class models. Trace tokens consume the budget first, so these use a
+# larger max_tokens than CORE. Cluster-servable thinkers (single A100-80GB) are
+# listed first; Kimi / gpt-oss-120b stay as hosted/deferred references.
 REASONING_MODELS: tuple[ModelSpec, ...] = (
+    ModelSpec("Qwen/Qwen3.6-35B-A3B", family="qwen",
+              reasoning=True, max_tokens=4096),
+    ModelSpec("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", family="nvidia",
+              reasoning=True, max_tokens=4096),
+    ModelSpec("google/gemma-4-26B-A4B-it", family="google",
+              reasoning=True, max_tokens=4096),
     ModelSpec("moonshotai/Kimi-K2.6", family="moonshot", reasoning=True, max_tokens=2048),
     ModelSpec("openai/gpt-oss-120b", family="gpt-oss", reasoning=True, max_tokens=2048),
 )
