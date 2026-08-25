@@ -17,8 +17,17 @@
 #          --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
 #          VLLM_ARGS="--quantization fp8 --trust-remote-code" cluster/run_grid.sbatch
 #
-# MODEL (required); RUN_ARGS (--extended, --determinism); VLLM_ARGS; PORT; WORKERS;
-# MAX_MODEL_LEN (default 32768 — Qwen native 262k OOMs KV cache on 80GB).
+# MODEL (required); ENTRY (panel default, or corpus); RUN_ARGS; VLLM_ARGS; PORT;
+# WORKERS; MAX_MODEL_LEN (default 32768 — Qwen native 262k OOMs KV cache on 80GB).
+#
+# Corpus shards (8 independent GPUs, not tensor-parallel). Array is on the CLI
+# so a normal panel submit cannot accidentally 8× eval2k:
+#   sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr --array=0-7 \
+#          --export=ALL,ENTRY=corpus,MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16,\
+#          VLLM_ARGS="--reasoning-parser nemotron_v3" cluster/run_grid.sbatch
+#   sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr --array=0-7 \
+#          --export=ALL,ENTRY=corpus,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
+#          cluster/run_grid.sbatch
 
 set -euo pipefail
 source ~/.config/hansard_llm.env
@@ -35,11 +44,12 @@ mkdir -p logs
 export VLLM_USE_FLASHINFER_SAMPLER=0
 
 MODEL="${MODEL:?export MODEL=<hf model id>}"
+ENTRY="${ENTRY:-panel}"
 PORT="${PORT:-$((8000 + RANDOM % 1000))}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-32768}"
 HOST=$(hostname -s)
 
-echo "serving $MODEL on $HOST:$PORT (max-model-len $MAX_MODEL_LEN)"
+echo "serving $MODEL on $HOST:$PORT (max-model-len $MAX_MODEL_LEN entry=$ENTRY)"
 vllm serve "$MODEL" --port "$PORT" --host 0.0.0.0 \
     --max-model-len "$MAX_MODEL_LEN" --trust-remote-code \
     ${VLLM_ARGS:-} > "logs/vllm-$SLURM_JOB_ID.log" 2>&1 &
@@ -59,8 +69,17 @@ export LLM_BASE_URL="http://127.0.0.1:$PORT/v1"
 export LLM_API_KEY="local"
 export LLM_BACKEND_NAME="vllm-${SLURM_CLUSTER_NAME:-cluster}"
 
-python -m hansard_llm.panel --model "$MODEL" ${RUN_ARGS:-} \
+if [ "$ENTRY" = "corpus" ]; then
+  : "${SLURM_ARRAY_TASK_ID:?ENTRY=corpus requires sbatch --array}"
+  python -m hansard_llm.corpus --model "$MODEL" --shard "$SLURM_ARRAY_TASK_ID" \
+    ${RUN_ARGS:-} --workers "${WORKERS:-32}"
+elif [ "$ENTRY" = "panel" ]; then
+  python -m hansard_llm.panel --model "$MODEL" ${RUN_ARGS:-} \
     --workers "${WORKERS:-32}"
+else
+  echo "unknown ENTRY=$ENTRY (use panel or corpus)" >&2
+  exit 1
+fi
 
 kill $VLLM_PID 2>/dev/null || true
 echo "done"

@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -166,7 +166,7 @@ class _Job:
 def _build_jobs(plan: RunPlan, done: set[str]) -> list[_Job]:
     jobs: list[_Job] = []
     for row in plan.speeches.itertuples():
-        text = row.speech_text or ""
+        text = getattr(row, "speech_text", None) or ""
         for v in plan.variants:
             for m in plan.models:
                 for cond in plan.conditions:
@@ -260,7 +260,8 @@ def _write_run_manifest(plan: RunPlan, *, experiment: str, run_id: str,
 def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
             include_legacy_cache: bool = True,
             cli_args: dict | None = None,
-            rerun: bool = False) -> int:
+            rerun: bool = False,
+            max_inflight: int | None = None) -> int:
     """Run all not-yet-cached cells in ``plan`` under a fresh run directory
     ``runs/<experiment>/<run_id>/``. Returns the number of new cells written.
 
@@ -272,6 +273,10 @@ def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
 
     ``rerun=True`` ignores the cache and rewrites every cell in ``plan`` (a
     new run directory). ``load_experiment`` keeps the latest row per cache key.
+
+    In-flight thread-pool futures are capped at ``max_inflight`` (default
+    ``4 * max_workers``) so a 535k-cell corpus shard does not submit every
+    job before the first result lands.
     """
     done: set[str] = set() if rerun else _experiment_done_keys(
         experiment, include_legacy=include_legacy_cache)
@@ -295,6 +300,8 @@ def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
         "code_version": provenance.git_sha(),
         "backend": config.backend_name(),
     }
+    if cli_args and cli_args.get("shard") is not None:
+        extras["shard"] = cli_args["shard"]
     if verbose:
         print(f"[{experiment}] run {run_id} -> {log_path}")
 
@@ -302,21 +309,38 @@ def execute(plan: RunPlan, *, experiment: str, verbose: bool = True,
     write_lock = threading.Lock()
     n_done = 0
     t0 = time.time()
+    inflight_limit = max_inflight if max_inflight is not None else max(
+        plan.max_workers * 4, plan.max_workers)
+    log_every = 25 if total < 500 else 100 if total < 10_000 else 1_000
 
     with log_path.open("a", encoding="utf-8") as fh, \
             ThreadPoolExecutor(max_workers=plan.max_workers) as pool:
-        futs = {pool.submit(_run_one, client, j, plan.topic,
-                            plan.max_tokens): j for j in jobs}
-        for fut in as_completed(futs):
-            row = {**fut.result(), **extras}
-            with write_lock:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-                fh.flush()
-                n_done += 1
-                if verbose and (n_done % 25 == 0 or n_done == total):
-                    rate = n_done / (time.time() - t0)
-                    eta = (total - n_done) / rate if rate else 0
-                    print(f"  {n_done}/{total}  ({rate:.1f}/s, eta {eta:.0f}s)")
+        job_iter = iter(jobs)
+        pending: set = set()
+
+        def _fill() -> None:
+            while len(pending) < inflight_limit:
+                try:
+                    j = next(job_iter)
+                except StopIteration:
+                    return
+                pending.add(pool.submit(
+                    _run_one, client, j, plan.topic, plan.max_tokens))
+
+        _fill()
+        while pending:
+            finished, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for fut in finished:
+                row = {**fut.result(), **extras}
+                with write_lock:
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    fh.flush()
+                    n_done += 1
+                    if verbose and (n_done % log_every == 0 or n_done == total):
+                        rate = n_done / (time.time() - t0)
+                        eta = (total - n_done) / rate if rate else 0
+                        print(f"  {n_done}/{total}  ({rate:.1f}/s, eta {eta:.0f}s)")
+            _fill()
     return n_done
 
 
@@ -401,6 +425,53 @@ def load_experiment(experiment: str, *, reparse: bool = True) -> pd.DataFrame:
     if reparse:
         df = reparse_results(df)
     return df
+
+
+def experiment_cell_stats(experiment: str) -> dict:
+    """Stream jsonl row counts without loading ``raw_text`` into pandas."""
+    n = 0
+    parse_ok = 0
+    for p in _experiment_logs(experiment):
+        with p.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                n += 1
+                if r.get("parse_ok"):
+                    parse_ok += 1
+    return {"n": n, "parse_ok": parse_ok}
+
+
+def compact_experiment_to_parquet(
+    experiment: str,
+    dest: Path,
+    *,
+    drop: tuple[str, ...] = ("raw_text", "reasoning"),
+) -> Path:
+    """Slim parquet for analysis. JSONL under the experiment dir stays canonical."""
+    rows: list[dict] = []
+    drop_set = set(drop)
+    for p in _experiment_logs(experiment):
+        with p.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                for k in drop_set:
+                    r.pop(k, None)
+                rows.append(r)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_parquet(dest, index=False)
+    return dest
 
 
 def _legacy_pool_labels(df: pd.DataFrame) -> pd.Series:

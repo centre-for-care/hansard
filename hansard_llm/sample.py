@@ -40,6 +40,33 @@ ERA_BUCKETS: tuple[tuple[str, int, int], ...] = (
 LENGTH_TIERS: tuple[str, ...] = ("short", "medium", "long")
 
 MIN_WORDS = 40  # below this there is not enough text for a topic judgement
+ELIGIBLE_CHAMBERS: tuple[str, ...] = ("Commons", "Lords")
+
+
+def eligible_where_sql(
+    *,
+    min_words: int = MIN_WORDS,
+    chambers: tuple[str, ...] = ELIGIBLE_CHAMBERS,
+    length_tiers: tuple[str, ...] = LENGTH_TIERS,
+    table: str | None = None,
+) -> str:
+    """Content-hygiene WHERE used by the pilot, eval2k, and the corpus pool.
+
+    Keep this as the single source of truth so those three paths cannot drift.
+    ``table`` prefixes columns (needed when the query joins another relation
+    that also has ``chamber`` / ``year``).
+    """
+    t = f"{table}." if table else ""
+    tiers = ", ".join("'" + t_ + "'" for t_ in length_tiers)
+    ch = ", ".join("'" + c + "'" for c in chambers)
+    return (
+        f"{t}speech_text IS NOT NULL\n"
+        f"          AND NOT {t}procedural\n"
+        f"          AND {t}word_count >= {min_words}\n"
+        f"          AND {t}speech_type IN ({tiers})\n"
+        f"          AND {t}chamber IN ({ch})\n"
+        f"          AND {t}year IS NOT NULL"
+    )
 
 
 @dataclass
@@ -49,7 +76,7 @@ class SampleDesign:
     per_cell_present: int = 12   # seed-positive speeches per (era x length) cell
     per_cell_absent: int = 6     # seed-negative speeches per (era x length) cell
     min_words: int = MIN_WORDS
-    chambers: tuple[str, ...] = ("Commons", "Lords")
+    chambers: tuple[str, ...] = ELIGIBLE_CHAMBERS
     seed: int = 20260629
 
 
@@ -84,7 +111,6 @@ def _build_meta_table(con: duckdb.DuckDBPyConnection,
     (no speech_text), tagged with era and the seed-presence flag. This is the
     only expensive scan; all per-cell sampling then runs against this table.
     """
-    chambers = ", ".join("'" + c + "'" for c in design.chambers)
     con.execute(
         f"""
         CREATE TEMP TABLE meta AS
@@ -94,12 +120,8 @@ def _build_meta_table(con: duckdb.DuckDBPyConnection,
             speech_type,
             regexp_matches(lower(speech_text), '{topic.seed_regex}') AS seed_present
         FROM enriched
-        WHERE speech_text IS NOT NULL
-          AND NOT procedural
-          AND word_count >= {design.min_words}
-          AND speech_type IN ({", ".join("'" + t + "'" for t in LENGTH_TIERS)})
-          AND chamber IN ({chambers})
-          AND year IS NOT NULL
+        WHERE {eligible_where_sql(min_words=design.min_words,
+                                  chambers=design.chambers)}
         """
     )
 
@@ -267,19 +289,12 @@ def build_eval_subset(
     """
     con = _connect()
     # Same content hygiene as the pilot, minus any seed-regex involvement.
-    chambers = ", ".join("'" + c + "'" for c in ("Commons", "Lords"))
-    tiers = ", ".join("'" + t + "'" for t in LENGTH_TIERS)
     con.execute(
         f"""
         CREATE TEMP TABLE eval_meta AS
         SELECT speech_id, (year // 10) * 10 AS decade_bin
         FROM enriched
-        WHERE speech_text IS NOT NULL
-          AND NOT procedural
-          AND word_count >= {MIN_WORDS}
-          AND speech_type IN ({tiers})
-          AND chamber IN ({chambers})
-          AND year IS NOT NULL
+        WHERE {eligible_where_sql()}
         """
     )
     pop = con.execute(

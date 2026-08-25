@@ -144,7 +144,8 @@ CLI if needed (`-p`, `--gres`, `--array`). Invalid account → ask bmrc-help.
 | Embedder, one model | `sbatch -A gpu_<group>.prj --array=0 cluster/embed_grid.sbatch` (0–7) |
 | LLM panel | `sbatch -A gpu_<group>.prj --export=ALL,MODEL=<hf-id> cluster/run_grid.sbatch` |
 | Panel smoke / timing | same + `,RUN_ARGS="--determinism"` |
-| Extended size axis | same + `,RUN_ARGS="--extended"` |
+| Full corpus (8 shards) | `--array=0-7` + `ENTRY=corpus` + `MODEL` (see § corpus below) |
+| Extended size axis | panel submit + `,RUN_ARGS="--extended"` |
 | Nemotron on A100-80GB | add `VLLM_ARGS="--quantization fp8"` to `--export` |
 | vLLM context cap | `MAX_MODEL_LEN` (default **32768** in the sbatch; Qwen native 262k OOMs KV cache) |
 | vLLM only | `sbatch -A gpu_<group>.prj --export=ALL,MODEL=<hf-id> cluster/serve_llm.sbatch` |
@@ -209,8 +210,61 @@ Outputs under `$HANSARD_LLM_ARTIFACTS_DIR` (`artifacts/llm/`):
 - `runs/panel2k/<run_id>/{manifest.json,results.jsonl}`
 - `runs/panel_extended2k/…`, `runs/panel_determinism/…`
 - `runs/embedder_grid/<run_id>/`
+- `runs/corpus_nemotron/…`, `runs/corpus_qwen30/…` (full eligible pool)
 
 Jobs are resumable: re-submit the same `MODEL` and only missing cells run.
+
+---
+
+## Full corpus (eligible pool, 8 shards)
+
+One shipping definition (`expert_hc_sc`), temp 0, one cell per speech. Models
+**A** Nemotron-3-Nano (think traces) then **B** `Qwen/Qwen3-30B-A3B-Instruct-2507`
+(fast labels). Eight independent A100s (not tensor-parallel). Build the frozen
+pool on a laptop or login CPU; GPU jobs only read it.
+
+```bash
+# laptop / login — once
+python -m hansard_llm.corpus --build-shards
+# scp eligible_pool.parquet (+ .manifest.json) to $HANSARD_SCRATCH/data/
+
+# login node — no GPU
+python -m hansard_llm.corpus --dry-run --model nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 --shard 0
+```
+
+Preflight (stop at the first fail):
+
+1. Local tests + `--build-shards` (expect 4,274,315 rows, 8 balanced shards).
+2. Cluster `--dry-run --shard {0-7}` after the parquet is in `$HANSARD_SCRATCH/data/`.
+3. One GPU, 200 speeches:
+
+```bash
+sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr --array=0 \
+  --export=ALL,ENTRY=corpus,MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16,\
+VLLM_ARGS="--reasoning-parser nemotron_v3",RUN_ARGS="--limit 200" \
+  cluster/run_grid.sbatch
+```
+
+4. Re-submit the same job: log must say `200 cells already done; 0 new cells`.
+5. Same `--limit 200` on `Qwen/Qwen3-30B-A3B-Instruct-2507` (no extra `VLLM_ARGS`).
+6. Optional soak: Nemotron `--limit 5000` (still `--array=0`).
+7. Full array, Nemotron first; do not start 8-way Qwen until Nemotron is
+   writing cells on all shards. Instruct Qwen is ~6 h/shard so it fits in one
+   24h wave; Nemotron still needs two.
+
+```bash
+sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr --array=0-7 \
+  --export=ALL,ENTRY=corpus,MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16,\
+VLLM_ARGS="--reasoning-parser nemotron_v3" \
+  cluster/run_grid.sbatch
+
+sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr --array=0-7 \
+  --export=ALL,ENTRY=corpus,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
+  cluster/run_grid.sbatch
+```
+
+Re-submit the same array until each shard prints `0 new cells` (24h QOS waves).
+`--array` is **not** in the sbatch file: passing it on a panel job would 8× eval2k.
 
 ---
 
@@ -223,7 +277,7 @@ Jobs are resumable: re-submit the same `MODEL` and only missing cells run.
 | `01b_setup_env_gh200.sh` | optional | ARM venv for GH200 |
 | `02_download_models.sh` | once (or as needed), login | HF weights into `$HF_HOME` |
 | `embed_grid.sbatch` | GPU job | embedder array → `hansard_llm.embedder_grid` |
-| `run_grid.sbatch` | GPU job | `vllm serve` + `hansard_llm.panel` |
+| `run_grid.sbatch` | GPU job | `vllm serve` + `hansard_llm.panel` (or `ENTRY=corpus` → `hansard_llm.corpus`) |
 | `serve_llm.sbatch` | GPU job | `vllm serve` only |
 
 ---

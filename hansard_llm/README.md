@@ -44,6 +44,24 @@ python -m hansard_llm.sample                 # write pilot sample (legacy path)
 
 ---
 
+## 0b. Full corpus (`eligible_pool.parquet`)
+
+Production labelling over the same hygiene as eval2k (no seed regex): ~4.27M
+speeches, one cell each (`expert_hc_sc`, JSON, uncapped, temp 0). Frozen 8-way
+decade×chamber shards. Do **not** run `panel.py` on this pool (that is 8 cells
+per speech).
+
+```bash
+python -m hansard_llm.corpus --build-shards
+python -m hansard_llm.corpus --dry-run --model nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 --shard 0
+python -m hansard_llm.corpus --status --model nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+```
+
+Cluster submit, preflight ladder, and 24h resume: `../cluster/README.md`
+(section *Full corpus*).
+
+---
+
 ## 1. LLM panel (`panel2k`)
 
 One job per model. Fixed prompt shape; vary **definition** and **sampling**.
@@ -188,5 +206,6 @@ gold = panel.panel_gold(exclude_definition="expert_hc_sc")  # LODO for that quer
 - **Idempotent resume** across run directories of the same experiment.
 - **Open vocabulary** for sub-themes; compare in embedding space downstream.
 - **A100 + FP8:** weight-only FP8 (W8A16) for Nemotron-49B — not native FP8 compute (Hopper/GH200).
-- Cluster wiring: `cluster/run_grid.sbatch` → `vllm serve` + `python -m hansard_llm.panel`;
+- Cluster wiring: `cluster/run_grid.sbatch` → `vllm serve` + `python -m hansard_llm.panel`
+  (or `ENTRY=corpus` → `python -m hansard_llm.corpus --shard $SLURM_ARRAY_TASK_ID`);
   `cluster/embed_grid.sbatch` → embedder array; details in `../cluster/README.md`.

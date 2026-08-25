@@ -48,7 +48,7 @@ def new_run_id() -> str:
 
 
 def run_dir(experiment: str, run_id: str) -> Path:
-    return config.ARTIFACTS_DIR / "runs" / experiment / run_id
+    return config.RUNS_DIR / experiment / run_id
 
 
 def write_manifest(directory: Path, payload: dict[str, Any],
