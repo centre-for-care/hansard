@@ -134,6 +134,12 @@ sbatch --export=ALL,MODEL=Qwen/Qwen3-4B-Instruct-2507,RUN_ARGS="--determinism" \
   cluster/arc/run_grid.sbatch
 
 sbatch --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 cluster/arc/run_grid.sbatch
+
+# Corpus — 8 shards, one H100 each. Needs eligible_pool.parquet in $HANSARD_LLM_DATA_DIR.
+# Smoke one shard first: --array=0
+sbatch --array=0-7 \
+  --export=ALL,ENTRY=corpus,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
+  cluster/arc/run_grid.sbatch
 ```
 
 Defaults in the scripts:
