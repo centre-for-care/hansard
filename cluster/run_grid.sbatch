@@ -17,6 +17,12 @@
 #          --export=ALL,MODEL=nvidia/Llama-3_3-Nemotron-Super-49B-v1_5,\
 #          VLLM_ARGS="--quantization fp8 --trust-remote-code" cluster/run_grid.sbatch
 #
+# Teammate definition+scope-rules experiment (one model per job, eval2k,
+# config.TEAMMATE_EXPERIMENT_ARMS), same pattern as the panel:
+#   sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr \
+#          --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507,RUN_ARGS="--teammate" \
+#          cluster/run_grid.sbatch
+#
 # MODEL (required); ENTRY (panel default, or corpus); RUN_ARGS; VLLM_ARGS; PORT;
 # WORKERS; MAX_MODEL_LEN (default 32768 — Qwen native 262k OOMs KV cache on 80GB).
 #

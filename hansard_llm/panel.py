@@ -34,11 +34,13 @@ import pandas as pd
 
 from . import config, run, sample
 from .config import ModelSpec
-from .prompts import TASK_UNCAPPED, build_definition_variants
+from .prompts import (TASK_UNCAPPED, build_definition_scope_arms,
+                      build_definition_variants)
 
 EXPERIMENT = "panel2k"
 EXPERIMENT_EXT = "panel_extended2k"
 EXPERIMENT_DET = "panel_determinism"
+EXPERIMENT_TEAMMATE = "panel_teammate2k"
 
 DETERMINISM_N = 200     # speeches for the temp-0 repeat check
 DETERMINISM_REPS = 3
@@ -86,6 +88,30 @@ def panel_plan(model: ModelSpec, *, max_workers: int = 32,
         variants=_variants(),
         models=(model,),
         conditions=PANEL_CONDITIONS,
+        max_workers=max_workers,
+        pool=POOL,
+        max_tokens=max_tokens,
+    )
+
+
+def teammate_plan(model: ModelSpec, *, max_workers: int = 32,
+                  max_tokens: int | None = None) -> run.RunPlan:
+    """RunPlan for the teammate definition+scope-rules experiment (2026-10) on
+    one model, full eval2k: old definition + new rules, new definition alone,
+    new definition + new rules (config.TEAMMATE_EXPERIMENT_ARMS). The fourth
+    cell (old definition, no rules) is the existing cached panel2k run under
+    definition=expert_hc_sc and is not repeated here."""
+    arms = tuple(
+        (config.HSC_DEFINITIONS[d], s) for d, s in config.TEAMMATE_EXPERIMENT_ARMS
+    )
+    variants = build_definition_scope_arms(
+        arms, roles=("none",), formats=("json",), task=TASK_UNCAPPED)
+    return run.RunPlan(
+        speeches=_eval_speeches(),
+        topic=config.DEFAULT_TOPIC,
+        variants=variants,
+        models=(model,),
+        conditions=(run.CORE,),
         max_workers=max_workers,
         pool=POOL,
         max_tokens=max_tokens,
@@ -210,6 +236,9 @@ def main(argv: list[str] | None = None) -> None:
                          "use for EXTENDED_MODELS size/family axis)")
     ap.add_argument("--determinism", action="store_true",
                     help="run the temp-0 repeat add-on instead of the panel")
+    ap.add_argument("--teammate", action="store_true",
+                    help="run the teammate definition+scope-rules experiment "
+                         "(config.TEAMMATE_EXPERIMENT_ARMS) instead of the panel")
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="completion budget (overrides ModelSpec / uncapped 1024). "
@@ -248,6 +277,10 @@ def main(argv: list[str] | None = None) -> None:
         plan, experiment = determinism_plan(
             spec, max_workers=args.workers,
             max_tokens=args.max_tokens), EXPERIMENT_DET
+    elif args.teammate:
+        plan, experiment = teammate_plan(
+            spec, max_workers=args.workers,
+            max_tokens=args.max_tokens), EXPERIMENT_TEAMMATE
     elif args.extended:
         plan, experiment = panel_plan(
             spec, max_workers=args.workers,

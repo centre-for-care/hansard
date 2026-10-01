@@ -184,9 +184,12 @@ cython_debug/
 # small PNGs and the brief (md/pdf) remain tracked as cited deliverables.
 hansard_llm/docs/*.html
 
-# Cluster job logs
-cluster/logs/
-logs/
+# Cluster job logs. Keep the dirs themselves: Slurm opens --output=logs/... before
+# the script's mkdir runs, so a clone without logs/ fails every task instantly.
+cluster/logs/*
+!cluster/logs/.gitkeep
+logs/*
+!logs/.gitkeep
 
 # Claude Code config, skills, and audit reports (kept local)
 .claude/

@@ -91,6 +91,12 @@ def _cache_key(speech_id, prompt_hash, model_id, temperature, seed, rep) -> str:
     return f"{speech_id}|{prompt_hash}|{model_id}|{temperature}|{seed}|{rep}"
 
 
+def cache_key_from_row(row: dict) -> str:
+    """Same key the runner uses to skip completed cells."""
+    return _cache_key(row["speech_id"], row["prompt_hash"], row["model_id"],
+                      row["temperature"], row["seed"], row["rep"])
+
+
 def _load_done_keys(log_path: Path) -> set[str]:
     if not log_path.exists():
         return set()
@@ -447,15 +453,15 @@ def experiment_cell_stats(experiment: str) -> dict:
     return {"n": n, "parse_ok": parse_ok}
 
 
-def compact_experiment_to_parquet(
-    experiment: str,
-    dest: Path,
-    *,
-    drop: tuple[str, ...] = ("raw_text", "reasoning"),
-) -> Path:
-    """Slim parquet for analysis. JSONL under the experiment dir stays canonical."""
-    rows: list[dict] = []
-    drop_set = set(drop)
+def _infer_experiment_schema(experiment: str, drop_set: set,
+                             *, scan_rows: int = 200_000, n_samples: int = 100):
+    """Sample non-null values per key so an all-null prefix cannot fix a column
+    to Arrow ``null`` type. Empty lists are kept only until a non-empty one is
+    seen, so ``list<null>`` never wins either."""
+    import pyarrow as pa
+
+    samples: dict[str, list] = {}
+    seen = 0
     for p in _experiment_logs(experiment):
         with p.open("r", encoding="utf-8") as fh:
             for line in fh:
@@ -466,11 +472,96 @@ def compact_experiment_to_parquet(
                     r = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                for k in drop_set:
-                    r.pop(k, None)
-                rows.append(r)
+                seen += 1
+                for k, v in r.items():
+                    if k in drop_set:
+                        continue
+                    # register every key, even one that is null throughout the
+                    # sample: it becomes a string column, not a dropped one.
+                    cur = samples.setdefault(k, [])
+                    if v is None or (v == [] and cur):
+                        continue
+                    if len(cur) < n_samples:
+                        cur.append(v)
+                if seen >= scan_rows:
+                    break
+        if seen >= scan_rows:
+            break
+
+    fields = []
+    for k, vals in samples.items():
+        try:
+            t = pa.array(vals).type if vals else pa.large_string()
+        except (pa.ArrowInvalid, pa.ArrowTypeError, pa.ArrowNotImplementedError):
+            t = pa.large_string()
+        if pa.types.is_null(t):
+            t = pa.large_string()
+        fields.append(pa.field(k, t))
+    return pa.schema(fields)
+
+
+def compact_experiment_to_parquet(
+    experiment: str,
+    dest: Path,
+    *,
+    drop: tuple[str, ...] = ("raw_text", "reasoning"),
+    batch_size: int = 100_000,
+    compression: str = "zstd",
+) -> Path:
+    """Slim parquet for analysis. JSONL under the experiment dir stays canonical.
+
+    Streamed in row-group batches, so peak memory tracks batch_size rather than
+    corpus size. Batches are built straight into Arrow: routing through pandas
+    would turn None into NaN and break the integer columns.
+
+    ``drop=()`` keeps raw_text/reasoning for an archival copy; zstd makes that
+    far smaller than the source JSONL, but it is a mirror, not the canonical
+    record — reparsing still reads the logs.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    drop_set = set(drop)
+    schema = _infer_experiment_schema(experiment, drop_set)
+    names = set(schema.names)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(rows).to_parquet(dest, index=False)
+
+    if not schema.names:
+        pd.DataFrame([]).to_parquet(dest, index=False)
+        return dest
+
+    writer = pq.ParquetWriter(dest, schema, compression=compression)
+    batch: list[dict] = []
+
+    def _flush(rows: list[dict]) -> None:
+        if rows:
+            writer.write_table(pa.Table.from_pylist(rows, schema=schema))
+
+    try:
+        for p in _experiment_logs(experiment):
+            with p.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        r = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    for k in drop_set:
+                        r.pop(k, None)
+                    unknown = r.keys() - names
+                    if unknown:
+                        raise ValueError(
+                            f"{experiment}: keys {sorted(unknown)} are absent "
+                            f"from the sampled schema; run logs disagree")
+                    batch.append(r)
+                    if len(batch) >= batch_size:
+                        _flush(batch)
+                        batch = []
+        _flush(batch)
+    finally:
+        writer.close()
     return dest
 
 
@@ -575,6 +666,7 @@ def uncapped_plan(
 def definition_plan(
     *,
     definitions: tuple[str, ...] = config.ALT_DEFINITIONS,
+    eval_sample: bool = False,
     n_speeches: int | None = None,
     models: tuple[ModelSpec, ...] = config.CORE_MODELS,
     conditions: tuple[Condition, ...] = (CORE,),
@@ -586,9 +678,13 @@ def definition_plan(
     Sizing: len(definitions) x 2 formats x len(models) cells per speech.
     Default definitions are ``config.ALT_DEFINITIONS`` (expert orders, current,
     name-only).
+
+    ``eval_sample`` draws from the eval2k slice (``sample.load_eval_sample``)
+    instead of the pilot sample — used for grid/definition work that should be
+    checked against the eval2k panel rather than the pilot's 270 speeches.
     """
     from . import sample
-    df = sample.load_sample()
+    df = sample.load_eval_sample() if eval_sample else sample.load_sample()
     if n_speeches is not None:
         df = df.head(n_speeches).copy()
     topics = [config.HSC_DEFINITIONS[d] for d in definitions]

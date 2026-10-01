@@ -314,11 +314,37 @@ _EXPERT_DEFINITION_TEXT = {
     "expert_sc_hc": f"{_EXPERT_SOCIAL_CARE} {_EXPERT_HEALTHCARE}",
 }
 
+# Teammate-sourced replacement definition (2026-10), run against the eval2k
+# slice alongside expert_hc_sc. Healthcare and social care are kept as one
+# combined paragraph (teammate's text), unlike the hc/sc order-pair above.
+_TEAMMATE_DEFINITION_TEXT = (
+    "Health and social care comprises services, policies and provision "
+    "directly concerned with maintaining or improving health, preventing, "
+    "treating or managing health conditions, or providing care and support "
+    "to people who need assistance because of illness, disability, age or "
+    "other care needs.\n\n"
+    "Healthcare includes disease prevention and public health services, "
+    "diagnosis, treatment, rehabilitation, maternity care, mental "
+    "healthcare, palliative and end-of-life care, and the organisation, "
+    "funding, staffing, regulation or delivery of clinical health "
+    "services.\n\n"
+    "Social care includes personal care and practical or supportive "
+    "assistance intended to enable people to live safely, independently "
+    "and with dignity. This includes home care, residential and nursing "
+    "care, supported living, day and community care services, support for "
+    "unpaid carers, and care and support services for people with "
+    "disabilities, older people or others with ongoing care needs."
+)
+
 HSC_DEFINITIONS: dict[str, Topic] = {
     "current": HEALTH_SOCIAL_CARE,
     # Name-only baseline: topic name with no expanded construct wording.
     "name_only": replace(
         HEALTH_SOCIAL_CARE, description="", definition_id="name_only",
+    ),
+    "teammate_v1": replace(
+        HEALTH_SOCIAL_CARE, description=_TEAMMATE_DEFINITION_TEXT,
+        definition_id="teammate_v1",
     ),
     **{
         key: replace(HEALTH_SOCIAL_CARE, description=text, definition_id=key)
@@ -335,4 +361,49 @@ DEFAULT_TOPIC = HSC_DEFINITIONS["expert_hc_sc"]
 # ``--definitions`` if you need to re-run or extend them.
 ALT_DEFINITIONS: tuple[str, ...] = (
     "expert_hc_sc", "expert_sc_hc", "current", "name_only",
+)
+
+# --------------------------------------------------------------------------
+# Scope rules (teammate-sourced, 2026-10): a separate axis from the definition
+# text above. The definition says *what the construct is*; this says *how
+# substantively it must appear in a speech to count* (passing mentions,
+# illustrative examples and general-welfare/poverty/housing/employment
+# determinants don't qualify unless the speech is substantively about care
+# delivery; historical sanitary/public-health measures qualify when framed as
+# the work of a public-health authority; vaccination/screening/disease
+# control qualify). Kept orthogonal to ``description`` (see prompts.SCOPE_LEVELS)
+# so any definition can be run with or without these rules.
+TEAMMATE_SCOPE_RULES = (
+    "A speech counts only where health or social care forms a meaningful "
+    "part of its argument, proposal, criticism, explanation or policy "
+    "discussion. Passing references, illustrative examples, indirect "
+    "consequences or brief mentions of health, illness, disability, "
+    "hospitals, doctors, poverty, vulnerability or welfare do not "
+    "qualify.\n\n"
+    "General welfare, poverty relief, social security, employment, "
+    "education, housing, transport, disability-access policy and other "
+    "social or environmental determinants of health do not qualify solely "
+    "because they affect health or vulnerable groups. They count only "
+    "where the speech substantively concerns healthcare, public-health "
+    "provision, or the organisation, funding, staffing, regulation or "
+    "delivery of care-and-support services.\n\n"
+    "Historically, sanitary, housing or related regulatory measures "
+    "qualify where they are substantively discussed as the work of a "
+    "public-health, sanitary or health authority, or as an organised "
+    "public-health intervention. This allows for periods in which "
+    "functions now understood as public health were delivered through "
+    "sanitary or local-government systems rather than modern health "
+    "services.\n\n"
+    "Public-health measures such as vaccination, screening, "
+    "infectious-disease control and organised disease-prevention services "
+    "qualify."
+)
+
+# The teammate experiment (2026-10): old shipping definition + rules, new
+# definition alone, new definition + rules. The fourth cell (old definition,
+# no rules) is the existing cached expert_hc_sc run and is NOT re-run here.
+TEAMMATE_EXPERIMENT_ARMS: tuple[tuple[str, str], ...] = (
+    ("expert_hc_sc", "teammate_v1"),  # old definition + new rules
+    ("teammate_v1", "none"),          # new definition, no rules
+    ("teammate_v1", "teammate_v1"),   # new definition + new rules
 )

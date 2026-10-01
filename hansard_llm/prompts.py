@@ -34,6 +34,13 @@ ROLE_LEVELS = ("none", "expert")
 TASK_LEVELS = ("v1", "v2")
 FORMAT_LEVELS = ("json", "free")
 
+# Scope rules: orthogonal to the definition text (Topic.description says what
+# the construct *is*; this says how substantively it must appear to count).
+# "none" is the existing behaviour (no extra rules block). Rule text lives in
+# config.py (TEAMMATE_SCOPE_RULES) so prompts.py stays free of definition
+# content.
+SCOPE_LEVELS = ("none", "teammate_v1")
+
 # The 5-topic cap lives in the task wording ("Give at most N sub-topics"). This
 # level is ``v1`` with that sentence removed, so it is the clean treatment for
 # testing whether the cap inflates the topic count. It is deliberately NOT in
@@ -113,6 +120,15 @@ def _task_block(level: str, topic: Topic) -> str:
     raise ValueError(f"unknown task level {level!r}")
 
 
+def _scope_block(level: str) -> str:
+    if level == "none":
+        return ""
+    if level == "teammate_v1":
+        from . import config
+        return config.TEAMMATE_SCOPE_RULES
+    raise ValueError(f"unknown scope level {level!r}")
+
+
 def _format_block(level: str) -> str:
     if level == "json":
         return (
@@ -141,10 +157,12 @@ class PromptVariant:
     task: str
     output_format: str
     topic: Topic
+    scope: str = "none"
 
     @property
     def variant_id(self) -> str:
-        return f"role={self.role}|task={self.task}|format={self.output_format}"
+        return (f"role={self.role}|task={self.task}|format={self.output_format}"
+                f"|scope={self.scope}")
 
     @property
     def definition(self) -> str:
@@ -162,9 +180,11 @@ class PromptVariant:
         return _role_block(self.role, self.topic)
 
     def _user_template(self) -> str:
-        """The user message body (task + format + speech placeholder)."""
+        """The user message body (task + scope rules + format + speech
+        placeholder)."""
         parts = [
             _task_block(self.task, self.topic),
+            _scope_block(self.scope),
             _format_block(self.output_format),
             f"Speech:\n{_PLACEHOLDER}",
         ]
@@ -235,6 +255,7 @@ def build_definition_variants(
     roles: tuple[str, ...] = ("none",),
     formats: tuple[str, ...] = FORMAT_LEVELS,
     task: str = TASK_UNCAPPED,
+    scopes: tuple[str, ...] = ("none",),
 ) -> list[PromptVariant]:
     """The definition-sensitivity arm: one variant set per construct definition,
     run at the new default configuration (no role, no cap, both formats).
@@ -243,8 +264,31 @@ def build_definition_variants(
     varying across ``topics`` is the definition text. Because ``description`` is
     interpolated into the task block, each definition yields a distinct
     ``prompt_hash`` and therefore cannot collide with cached cells.
+
+    ``scopes`` is a cartesian factor like ``roles``/``formats``: every topic is
+    run under every listed scope level. Use ``build_definition_scope_arms`` for
+    the teammate experiment, where each definition pairs with a *specific*
+    scope rather than the full cross.
     """
     return [
-        PromptVariant(role=r, task=task, output_format=f, topic=t)
-        for t in topics for r in roles for f in formats
+        PromptVariant(role=r, task=task, output_format=f, topic=t, scope=s)
+        for t in topics for r in roles for f in formats for s in scopes
+    ]
+
+
+def build_definition_scope_arms(
+    arms: tuple[tuple[Topic, str], ...],
+    *,
+    roles: tuple[str, ...] = ("none",),
+    formats: tuple[str, ...] = FORMAT_LEVELS,
+    task: str = TASK_UNCAPPED,
+) -> list[PromptVariant]:
+    """Explicit (definition, scope) pairs, rather than a full cross — for
+    experiments like the teammate arms, where "old definition" only pairs
+    with "new rules" and "new definition" is tested both with and without
+    them. Each pair in ``arms`` gets its own role x format cross.
+    """
+    return [
+        PromptVariant(role=r, task=task, output_format=f, topic=t, scope=s)
+        for t, s in arms for r in roles for f in formats
     ]

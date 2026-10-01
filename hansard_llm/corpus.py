@@ -318,6 +318,8 @@ def main(argv: list[str] | None = None) -> None:
                     help="print would-run counts; no LLM calls")
     ap.add_argument("--status", action="store_true",
                     help="stream counts for this model's corpus experiment and exit")
+    ap.add_argument("--compact", action="store_true",
+                    help="write the slim analysis parquet for this experiment and exit")
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--max-tokens", type=int, default=None)
     ap.add_argument("--rerun", action="store_true",
@@ -341,6 +343,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.status:
         stats = run.experiment_cell_stats(experiment)
         print(f"{experiment}: {stats['n']} rows, parse_ok {stats['parse_ok']}")
+        return
+
+    if args.compact:
+        dest = config.DATA_DIR / f"{experiment}.parquet"
+        run.compact_experiment_to_parquet(experiment, dest)
+        print(f"wrote {dest} ({dest.stat().st_size / 1e9:.2f} GB)")
         return
 
     if args.shard is None:
