@@ -62,7 +62,7 @@ class LLMClient:
         *,
         max_retries: int = 4,
         backoff_base: float = 1.5,
-        timeout: float = 120.0,
+        timeout: float = 900.0,  # a thinking cell on a long speech can take minutes
     ) -> None:
         self._client = OpenAI(
             base_url=config.base_url(),

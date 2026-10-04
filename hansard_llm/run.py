@@ -110,6 +110,8 @@ def _load_done_keys(log_path: Path) -> set[str]:
                 r = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if r.get("error"):
+                continue  # API failure, not an answer: a resume must retry it
             keys.add(_cache_key(r["speech_id"], r["prompt_hash"], r["model_id"],
                                 r["temperature"], r["seed"], r["rep"]))
     return keys

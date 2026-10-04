@@ -106,3 +106,12 @@ def test_run_id_differs_per_array_task_in_the_same_second(monkeypatch):
         monkeypatch.setenv("SLURM_ARRAY_TASK_ID", task)
         ids.add(provenance.new_run_id())
     assert len(ids) == 2
+
+
+def test_errored_cells_are_not_done(tmp_path):
+    base = {"prompt_hash": "h1", "model_id": "m", "temperature": 0.0, "seed": 42, "rep": 0}
+    log = tmp_path / "results.jsonl"
+    rows = [{**base, "speech_id": 1, "error": None},
+            {**base, "speech_id": 2, "error": "APITimeoutError: Request timed out."}]
+    log.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    assert run._load_done_keys(log) == {run._cache_key(1, "h1", "m", 0.0, 42, 0)}
