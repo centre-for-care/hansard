@@ -46,6 +46,11 @@ TEAMMATE_RUNS = {
     "main": (config.TEAMMATE_EXPERIMENT_ARMS, "panel_teammate2k"),
     "repeat": (config.TEAMMATE_EXPERIMENT_ARMS, "panel_teammate2k_repeat"),
     "placement": (config.TEAMMATE_PLACEMENT_ARMS, "panel_teammate2k_placement"),
+    # Serving mode is set by vLLM flags, so each mode needs its own experiment.
+    "think": (config.TEAMMATE_FOUR_ARMS, "panel_teammate2k_think"),
+    "think_repeat": (config.TEAMMATE_FOUR_ARMS, "panel_teammate2k_think_repeat"),
+    "nothink": (config.TEAMMATE_FOUR_ARMS, "panel_teammate2k_nothink"),
+    "nothink_repeat": (config.TEAMMATE_FOUR_ARMS, "panel_teammate2k_nothink_repeat"),
 }
 
 DETERMINISM_N = 200     # speeches for the temp-0 repeat check
@@ -246,7 +251,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--teammate", nargs="?", const="main", choices=list(TEAMMATE_RUNS),
                     help="run the teammate definition+scope-rules experiment "
                          "instead of the panel: main (default), repeat of main "
-                         "(noise floor), or placement of the rules text")
+                         "(noise floor), placement of the rules text, or "
+                         "think/nothink (four arms, for a model served in that mode), "
+                         "each with a _repeat variant (second serving)")
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="completion budget (overrides ModelSpec / uncapped 1024). "

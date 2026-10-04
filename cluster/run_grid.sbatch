@@ -25,6 +25,12 @@
 # RUN_ARGS="--teammate repeat" re-runs the same arms as a noise floor;
 # RUN_ARGS="--teammate placement" moves the rules into the system message or
 # after the format instruction. Both write to their own experiment.
+# Hybrid thinking model (Qwen3.8-27B), one run per mode; the mode is a serve flag.
+# Keep the JSON free of spaces and commas so --export and word splitting leave it intact:
+#   thinking:     RUN_ARGS="--teammate think",VLLM_ARGS="--reasoning-parser qwen3"
+#   non-thinking: RUN_ARGS="--teammate nothink",VLLM_ARGS='--default-chat-template-kwargs {"enable_thinking":false}'
+# Each mode also has --teammate {think,nothink}_repeat (second serving); keep the
+# serve flags matched to the mode in the name.
 #
 # MODEL (required); ENTRY (panel default, or corpus); RUN_ARGS; VLLM_ARGS; PORT;
 # WORKERS; MAX_MODEL_LEN (default 32768 — Qwen native 262k OOMs KV cache on 80GB).

@@ -138,6 +138,10 @@ REFERENCE_MODELS: tuple[ModelSpec, ...] = (
 REASONING_MODELS: tuple[ModelSpec, ...] = (
     ModelSpec("Qwen/Qwen3.6-35B-A3B", family="qwen",
               reasoning=True, max_tokens=4096),
+    # One hybrid checkpoint: thinks by default; non-thinking is a serve-time
+    # switch (see cluster/run_grid.sbatch), so the same id serves both modes.
+    ModelSpec("Qwen/Qwen3.8-27B", family="qwen",
+              reasoning=True, max_tokens=4096),
     ModelSpec("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", family="nvidia",
               reasoning=True, max_tokens=4096),
     ModelSpec("google/gemma-4-26B-A4B-it", family="google",
@@ -407,6 +411,12 @@ TEAMMATE_EXPERIMENT_ARMS: tuple[tuple[str, str], ...] = (
     ("teammate_v1", "none"),          # new definition, no rules
     ("teammate_v1", "teammate_v1"),   # new definition + new rules
 )
+
+# For a model with no cached panel2k baseline: the baseline arm plus the three
+# teammate arms, so all four cells come from one run.
+TEAMMATE_FOUR_ARMS: tuple[tuple[str, str], ...] = (
+    ("expert_hc_sc", "none"),
+) + TEAMMATE_EXPERIMENT_ARMS
 
 # Same rules text moved: into the system message (_sys) or after the format
 # instruction (_end). Read against a repeat of TEAMMATE_EXPERIMENT_ARMS, which
