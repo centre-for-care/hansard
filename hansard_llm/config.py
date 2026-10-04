@@ -407,3 +407,13 @@ TEAMMATE_EXPERIMENT_ARMS: tuple[tuple[str, str], ...] = (
     ("teammate_v1", "none"),          # new definition, no rules
     ("teammate_v1", "teammate_v1"),   # new definition + new rules
 )
+
+# Same rules text moved: into the system message (_sys) or after the format
+# instruction (_end). Read against a repeat of TEAMMATE_EXPERIMENT_ARMS, which
+# gives the run-to-run noise these shifts have to exceed.
+TEAMMATE_PLACEMENT_ARMS: tuple[tuple[str, str], ...] = (
+    ("expert_hc_sc", "teammate_v1_sys"),
+    ("expert_hc_sc", "teammate_v1_end"),
+    ("teammate_v1", "teammate_v1_sys"),
+    ("teammate_v1", "teammate_v1_end"),
+)

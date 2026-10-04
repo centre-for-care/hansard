@@ -39,7 +39,10 @@ FORMAT_LEVELS = ("json", "free")
 # "none" is the existing behaviour (no extra rules block). Rule text lives in
 # config.py (TEAMMATE_SCOPE_RULES) so prompts.py stays free of definition
 # content.
-SCOPE_LEVELS = ("none", "teammate_v1")
+SCOPE_LEVELS = ("none", "teammate_v1", "teammate_v1_sys", "teammate_v1_end")
+# Same rules text, different position: ``teammate_v1`` follows the task in the
+# user message, ``_sys`` moves it to the system message, ``_end`` places it
+# after the format instruction, just before the speech.
 
 # The 5-topic cap lives in the task wording ("Give at most N sub-topics"). This
 # level is ``v1`` with that sentence removed, so it is the clean treatment for
@@ -120,10 +123,10 @@ def _task_block(level: str, topic: Topic) -> str:
     raise ValueError(f"unknown task level {level!r}")
 
 
-def _scope_block(level: str) -> str:
+def _scope_text(level: str) -> str:
     if level == "none":
         return ""
-    if level == "teammate_v1":
+    if level in SCOPE_LEVELS:
         from . import config
         return config.TEAMMATE_SCOPE_RULES
     raise ValueError(f"unknown scope level {level!r}")
@@ -177,15 +180,18 @@ class PromptVariant:
 
     def _system_text(self) -> str:
         """The role component, which is delivered as a system message."""
-        return _role_block(self.role, self.topic)
+        rules = _scope_text(self.scope) if self.scope.endswith("_sys") else ""
+        return "\n\n".join(p for p in (_role_block(self.role, self.topic), rules) if p)
 
     def _user_template(self) -> str:
-        """The user message body (task + scope rules + format + speech
-        placeholder)."""
+        """The user message body (task, format, speech placeholder), with the
+        scope rules after the task or after the format depending on the level."""
+        rules = _scope_text(self.scope)
         parts = [
             _task_block(self.task, self.topic),
-            _scope_block(self.scope),
+            rules if self.scope == "teammate_v1" else "",
             _format_block(self.output_format),
+            rules if self.scope.endswith("_end") else "",
             f"Speech:\n{_PLACEHOLDER}",
         ]
         return "\n\n".join(p for p in parts if p)

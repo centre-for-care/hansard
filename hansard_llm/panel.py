@@ -40,7 +40,13 @@ from .prompts import (TASK_UNCAPPED, build_definition_scope_arms,
 EXPERIMENT = "panel2k"
 EXPERIMENT_EXT = "panel_extended2k"
 EXPERIMENT_DET = "panel_determinism"
-EXPERIMENT_TEAMMATE = "panel_teammate2k"
+# --teammate [main|repeat|placement] -> (arms, experiment). The repeat needs its
+# own experiment name: load_experiment keeps only the latest row per cell key.
+TEAMMATE_RUNS = {
+    "main": (config.TEAMMATE_EXPERIMENT_ARMS, "panel_teammate2k"),
+    "repeat": (config.TEAMMATE_EXPERIMENT_ARMS, "panel_teammate2k_repeat"),
+    "placement": (config.TEAMMATE_PLACEMENT_ARMS, "panel_teammate2k_placement"),
+}
 
 DETERMINISM_N = 200     # speeches for the temp-0 repeat check
 DETERMINISM_REPS = 3
@@ -95,15 +101,16 @@ def panel_plan(model: ModelSpec, *, max_workers: int = 32,
 
 
 def teammate_plan(model: ModelSpec, *, max_workers: int = 32,
-                  max_tokens: int | None = None) -> run.RunPlan:
+                  max_tokens: int | None = None,
+                  arm_ids: tuple[tuple[str, str], ...] = config.TEAMMATE_EXPERIMENT_ARMS,
+                  ) -> run.RunPlan:
     """RunPlan for the teammate definition+scope-rules experiment (2026-10) on
-    one model, full eval2k: old definition + new rules, new definition alone,
-    new definition + new rules (config.TEAMMATE_EXPERIMENT_ARMS). The fourth
-    cell (old definition, no rules) is the existing cached panel2k run under
-    definition=expert_hc_sc and is not repeated here."""
-    arms = tuple(
-        (config.HSC_DEFINITIONS[d], s) for d, s in config.TEAMMATE_EXPERIMENT_ARMS
-    )
+    one model, full eval2k. By default: old definition + new rules, new
+    definition alone, new definition + new rules (config.TEAMMATE_EXPERIMENT_ARMS).
+    The fourth cell (old definition, no rules) is the existing cached panel2k run
+    under definition=expert_hc_sc and is not repeated here. The repeat and
+    placement runs reuse this plan with a different arm list and experiment name."""
+    arms = tuple((config.HSC_DEFINITIONS[d], s) for d, s in arm_ids)
     variants = build_definition_scope_arms(
         arms, roles=("none",), formats=("json",), task=TASK_UNCAPPED)
     return run.RunPlan(
@@ -236,9 +243,10 @@ def main(argv: list[str] | None = None) -> None:
                          "use for EXTENDED_MODELS size/family axis)")
     ap.add_argument("--determinism", action="store_true",
                     help="run the temp-0 repeat add-on instead of the panel")
-    ap.add_argument("--teammate", action="store_true",
+    ap.add_argument("--teammate", nargs="?", const="main", choices=list(TEAMMATE_RUNS),
                     help="run the teammate definition+scope-rules experiment "
-                         "(config.TEAMMATE_EXPERIMENT_ARMS) instead of the panel")
+                         "instead of the panel: main (default), repeat of main "
+                         "(noise floor), or placement of the rules text")
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="completion budget (overrides ModelSpec / uncapped 1024). "
@@ -278,9 +286,9 @@ def main(argv: list[str] | None = None) -> None:
             spec, max_workers=args.workers,
             max_tokens=args.max_tokens), EXPERIMENT_DET
     elif args.teammate:
-        plan, experiment = teammate_plan(
-            spec, max_workers=args.workers,
-            max_tokens=args.max_tokens), EXPERIMENT_TEAMMATE
+        arm_ids, experiment = TEAMMATE_RUNS[args.teammate]
+        plan = teammate_plan(spec, max_workers=args.workers,
+                             max_tokens=args.max_tokens, arm_ids=arm_ids)
     elif args.extended:
         plan, experiment = panel_plan(
             spec, max_workers=args.workers,

@@ -22,6 +22,9 @@
 #   sbatch -A gpu_<group>.prj --qos gpu_bmrc_24hr \
 #          --export=ALL,MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507,RUN_ARGS="--teammate" \
 #          cluster/run_grid.sbatch
+# RUN_ARGS="--teammate repeat" re-runs the same arms as a noise floor;
+# RUN_ARGS="--teammate placement" moves the rules into the system message or
+# after the format instruction. Both write to their own experiment.
 #
 # MODEL (required); ENTRY (panel default, or corpus); RUN_ARGS; VLLM_ARGS; PORT;
 # WORKERS; MAX_MODEL_LEN (default 32768 — Qwen native 262k OOMs KV cache on 80GB).
