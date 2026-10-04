@@ -13,6 +13,7 @@ legacy single-log store could not prevent.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -40,11 +41,19 @@ def git_sha(short: bool = True) -> str:
 
 
 def new_run_id() -> str:
-    """``YYYYMMDD-HHMMSS-<shortsha>`` — sortable, human-readable, and tied to
-    the code version that produced the run."""
+    """``YYYYMMDD-HHMMSS-<shortsha>-<tag>`` — sortable, human-readable, and tied
+    to the code version that produced the run.
+
+    The tag is required, not cosmetic: the stamp is second-precision, so two
+    array tasks starting in the same second share a run dir, and the loser's
+    manifest is overwritten in silence (this cost shard 3 of corpus_qwen30 its
+    manifest on 2026-08-31).
+    """
     stamp = time.strftime("%Y%m%d-%H%M%S")
     sha = git_sha().replace("-dirty", "d")
-    return f"{stamp}-{sha}"
+    task = os.environ.get("SLURM_ARRAY_TASK_ID")
+    tag = f"t{task}" if task else f"p{os.getpid()}"
+    return f"{stamp}-{sha}-{tag}"
 
 
 def run_dir(experiment: str, run_id: str) -> Path:

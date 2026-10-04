@@ -6,7 +6,7 @@ import json
 import pandas as pd
 import pytest
 
-from hansard_llm import config, run
+from hansard_llm import config, provenance, run
 
 
 def test_cache_key_roundtrip():
@@ -97,3 +97,12 @@ def test_uncapped_reparse_not_retruncated():
     out = run.reparse_results(df)
     assert len(out.loc[0, "subthemes"]) == 12   # uncapped arm keeps all
     assert len(out.loc[1, "subthemes"]) == 5    # capped arm capped at 5
+
+
+def test_run_id_differs_per_array_task_in_the_same_second(monkeypatch):
+    monkeypatch.setattr(provenance.time, "strftime", lambda fmt: "20260101-000000")
+    ids = set()
+    for task in ("0", "1"):
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", task)
+        ids.add(provenance.new_run_id())
+    assert len(ids) == 2
