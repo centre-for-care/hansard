@@ -48,11 +48,14 @@ class Piece:
     n: int
 
 
-def experiment_for_model(model_id: str) -> str:
+def experiment_for_model(model_id: str, tag: str = "") -> str:
+    """Experiment name for a model; ``tag`` separates runs of one model that
+    differ in serving mode or prompt (cells are cached per experiment)."""
     if model_id in EXPERIMENT_BY_MODEL:
-        return EXPERIMENT_BY_MODEL[model_id]
-    slug = model_id.rsplit("/", 1)[-1].lower().replace(".", "")
-    return f"corpus_{slug}"
+        name = EXPERIMENT_BY_MODEL[model_id]
+    else:
+        name = f"corpus_{model_id.rsplit('/', 1)[-1].lower().replace('.', '')}"
+    return f"{name}_{tag}" if tag else name
 
 
 def eligible_pool_path():
@@ -260,12 +263,18 @@ def load_shard(
     return df
 
 
-def _variants():
+def _topic(rules: bool):
+    """Shipping default, or the teammate definition (paired with the rules)."""
+    return config.HSC_DEFINITIONS["teammate_v1"] if rules else config.DEFAULT_TOPIC
+
+
+def _variants(rules: bool = False):
     return build_definition_variants(
-        [config.DEFAULT_TOPIC],
+        [_topic(rules)],
         roles=("none",),
         formats=("json",),
         task=TASK_UNCAPPED,
+        scopes=("teammate_v1" if rules else "none",),
     )
 
 
@@ -275,11 +284,12 @@ def corpus_plan(
     *,
     max_workers: int = 32,
     max_tokens: int | None = None,
+    rules: bool = False,
 ) -> run.RunPlan:
     return run.RunPlan(
         speeches=speeches,
-        topic=config.DEFAULT_TOPIC,
-        variants=_variants(),
+        topic=_topic(rules),
+        variants=_variants(rules),
         models=(model,),
         conditions=(run.CORE,),
         max_workers=max_workers,
@@ -320,6 +330,13 @@ def main(argv: list[str] | None = None) -> None:
                     help="stream counts for this model's corpus experiment and exit")
     ap.add_argument("--compact", action="store_true",
                     help="write the slim analysis parquet for this experiment and exit")
+    ap.add_argument("--keep-raw", action="store_true",
+                    help="with --compact: keep raw_text/reasoning (archival mirror)")
+    ap.add_argument("--rules", action="store_true",
+                    help="label with the teammate definition + scope rules "
+                         "(after the task) instead of the shipping default")
+    ap.add_argument("--tag", default="",
+                    help="suffix for the experiment name, e.g. nothink_newrules")
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--max-tokens", type=int, default=None)
     ap.add_argument("--rerun", action="store_true",
@@ -338,7 +355,7 @@ def main(argv: list[str] | None = None) -> None:
     if spec is None:
         ap.error(f"unknown model {args.model!r}; known: "
                  f"{sorted(config.MODELS_BY_ID)}")
-    experiment = experiment_for_model(spec.model_id)
+    experiment = experiment_for_model(spec.model_id, args.tag)
 
     if args.status:
         stats = run.experiment_cell_stats(experiment)
@@ -346,8 +363,10 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.compact:
-        dest = config.DATA_DIR / f"{experiment}.parquet"
-        run.compact_experiment_to_parquet(experiment, dest)
+        suffix = "full" if args.keep_raw else "slim"
+        dest = config.DATA_DIR / f"{experiment}.{suffix}.parquet"
+        run.compact_experiment_to_parquet(
+            experiment, dest, drop=() if args.keep_raw else ("raw_text", "reasoning"))
         print(f"wrote {dest} ({dest.stat().st_size / 1e9:.2f} GB)")
         return
 
@@ -359,7 +378,7 @@ def main(argv: list[str] | None = None) -> None:
         cols = [c for c in cols if c != "speech_text"]
     speeches = load_shard(args.shard, columns=cols, limit=args.limit)
     plan = corpus_plan(spec, speeches, max_workers=args.workers,
-                       max_tokens=args.max_tokens)
+                       max_tokens=args.max_tokens, rules=args.rules)
 
     if args.dry_run:
         summary = dry_run(plan, experiment=experiment, shard=args.shard)
